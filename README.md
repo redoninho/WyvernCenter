@@ -8,6 +8,22 @@ It lives in the tray, uses about 20 MB of RAM in the background, and installs no
 > **Not affiliated with MSI.** "MSI" is a trademark of Micro-Star International. This is an independent, community
 > project that talks to the laptop's firmware through interfaces already present in Windows.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/wyvern-main.png" width="300" alt="Main window: pick a profile">
+</p>
+<p align="center">
+  <img src="docs/screenshots/wyvern-monitor.png" width="430" alt="Monitor: live temperatures, power, clocks and fans">
+  &nbsp;
+  <img src="docs/screenshots/wyvern-settings.png" width="235" alt="Settings: overlay, hotkeys, startup and this laptop">
+</p>
+<p align="center">
+  <img src="docs/screenshots/wyvern-edit-profile-cpu.png" width="360" alt="Edit a profile: CPU cap, turbo and fan curve">
+  &nbsp;
+  <img src="docs/screenshots/wyvern-edit-profile-gpu.png" width="360" alt="Edit a profile: GPU clock, power and fan curve">
+</p>
+
 ## What it does
 
 - **Profiles:** one click sets everything:
