@@ -958,6 +958,36 @@ public sealed class AppController : ApplicationContext
         Post(() => { done(ok, note); Notify(); });
     });
 
+    /// <summary>The MSI level names for a measure step: the level now and the one it will try.</summary>
+    public void VerifyLevelNames(VerifyStep step, Action<string, string> done) => hw.Enqueue(() =>
+    {
+        var def = step.Setting is { } s ? Ec.Profile?.Settings.GetValueOrDefault(s) : null;
+        string Name(int? v) => VerifyPlan.LevelName(def?.Values?.FirstOrDefault(kv => kv.Value == v).Key);
+        var now = step.Setting is { } n ? Ec.TryGet(n) : null;
+        var test = def is not null && now is int cur ? VerifyPlan.TestValue(SettingDefView.Of(def), cur) : null;
+        Post(() => done(Name(now), Name(test)));
+    });
+
+    // The measure step's CPU load. Its own deadline stops it even if the wizard stops feeding samples.
+    private readonly object verifyLoadLock = new();
+    private CpuLoad? verifyLoad;
+    private System.Threading.Timer? verifyLoadDeadline;
+
+    public void VerifyLoad(bool on)
+    {
+        lock (verifyLoadLock)
+        {
+            verifyLoadDeadline?.Dispose();
+            verifyLoadDeadline = null;
+            verifyLoad?.Stop();
+            verifyLoad = null;
+            if (!on) return;
+            verifyLoad = new CpuLoad(Environment.ProcessorCount);
+            verifyLoad.Start();
+            verifyLoadDeadline = new System.Threading.Timer(_ => VerifyLoad(false), null, ModeMeasurement.DeadlineSeconds * 1000, Timeout.Infinite);
+        }
+    }
+
     /// <summary>
     /// Ends the session: anything still changed goes back, WMI v2 writes go off again, and the answers are kept for
     /// the next support report.
@@ -966,6 +996,7 @@ public sealed class AppController : ApplicationContext
 
     private void EndVerifyNow(IReadOnlyList<VerifyResult>? results)
     {
+        VerifyLoad(false);
         if (verify is not null)
         {
             foreach (var note in verify.End().Where(n => n != "")) log.Append("verify: " + note);
@@ -991,6 +1022,7 @@ public sealed class AppController : ApplicationContext
             "kbdBacklight" => $"Level {value}",
             "coolerBoost" => value == 1 ? "On" : "Off",
             "chargeLimit" => $"{value}%",
+            "shiftMode" => $"{VerifyPlan.LevelName(name)} ({VerifySession.Show(setting, value)})",
             _ => name is null ? VerifySession.Show(setting, value) : $"{char.ToUpperInvariant(name[0])}{name[1..]} ({VerifySession.Show(setting, value)})",
         };
     }

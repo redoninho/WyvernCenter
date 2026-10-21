@@ -33,10 +33,10 @@ public class VerifyTests : IDisposable
         var (ec, _, _) = Wmi2Laptop();
         var plan = VerifyPlan.For(ec, maxCoolingAvailable: false);
         Assert.Equal("sensors", plan[0].Id);
-        Assert.True(plan.TakeWhile(s => s.Kind != StepKind.Change).Count() > 1);
-        Assert.All(plan.SkipWhile(s => s.Kind != StepKind.Change), s => Assert.Equal(StepKind.Change, s.Kind));
-        Assert.Equal(new[] { "kbdChange", "modeChange", "boostChange", "chargeChange" },
-            plan.Where(s => s.Kind == StepKind.Change).Select(s => s.Id));
+        Assert.True(plan.TakeWhile(s => s.Kind is not (StepKind.Change or StepKind.Measure)).Count() > 1);
+        Assert.All(plan.SkipWhile(s => s.Kind is not (StepKind.Change or StepKind.Measure)), s => Assert.True(s.Kind is StepKind.Change or StepKind.Measure));
+        Assert.Equal(new[] { "kbdChange", "modeMeasure", "boostChange", "chargeChange" },
+            plan.Where(s => s.Kind is StepKind.Change or StepKind.Measure).Select(s => s.Id));
 
         var gf63 = new EcController(ProfileCatalog.Match("16R5EMS1.102"), new EcAccess(new FakeScm()),
             new SnapshotStore(Path.Combine(_dir, "g.json")), new WriteLog(Path.Combine(_dir, "g.txt")), canWrite: true, canTest: true);
@@ -53,14 +53,14 @@ public class VerifyTests : IDisposable
         var plan = VerifyPlan.For(ec, false);
         var session = new VerifySession(ec);
 
-        Assert.False(session.Apply(Step(plan, "modeChange")).Ok);   // no session yet: refused
+        Assert.False(session.Apply(Step(plan, "modeMeasure")).Ok);   // no session yet: refused
         Assert.Equal(0xC1, fw.Ram[0xD2]);
 
         Assert.True(session.Begin());
-        var applied = session.Apply(Step(plan, "modeChange"));
+        var applied = session.Apply(Step(plan, "modeMeasure"));
         Assert.True(applied.Ok, applied.Note);
         Assert.NotEqual(0xC1, fw.Ram[0xD2]);
-        var back = session.Revert(Step(plan, "modeChange"));
+        var back = session.Revert(Step(plan, "modeMeasure"));
         Assert.True(back.Ok, back.Note);
         Assert.Equal(0xC1, fw.Ram[0xD2]);
         session.End();
@@ -92,7 +92,7 @@ public class VerifyTests : IDisposable
         var (ec, fw, _) = Wmi2Laptop();
         var session = new VerifySession(ec);
         session.Begin();
-        Assert.False(session.Apply(Step(VerifyPlan.For(ec, false), "modeChange")).Ok);
+        Assert.False(session.Apply(Step(VerifyPlan.For(ec, false), "modeMeasure")).Ok);
         Assert.Equal(0xC1, fw.Ram[0xD2]);
         Assert.DoesNotContain(fw.Calls, c => c.Method == Wmi2Method.SetData);
     }
@@ -136,8 +136,9 @@ public class VerifyTests : IDisposable
     public void TestValues_AreClearlyDifferentAndAllowed()
     {
         var shift = SettingDefView.Of(ProfileCatalog.GenericFor(FirmwareInterface.Wmi2).Settings["shiftMode"]);
-        Assert.Equal(0xC4, VerifyPlan.TestValue(shift, 0xC1));      // comfort → turbo
-        Assert.Equal(0xC2, VerifyPlan.TestValue(shift, 0xC4));      // turbo → eco
+        Assert.Equal(0xC2, VerifyPlan.TestValue(shift, 0xC1));      // Normal → Super Battery (the safe direction)
+        Assert.Equal(0xC2, VerifyPlan.TestValue(shift, 0xC4));      // Extreme → Super Battery
+        Assert.Equal(0xC4, VerifyPlan.TestValue(shift, 0xC2));      // Super Battery → Extreme
         var kbd = new SettingDefView("kbdBacklight", null, 0, 3);
         Assert.Equal(3, VerifyPlan.TestValue(kbd, 1));
         Assert.Equal(0, VerifyPlan.TestValue(kbd, 3));

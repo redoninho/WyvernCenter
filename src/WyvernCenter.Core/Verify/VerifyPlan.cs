@@ -3,8 +3,11 @@ using WyvernCenter.Core.Safety;
 
 namespace WyvernCenter.Core.Verify;
 
-/// <summary>Readings: live values to judge. Observe: press a key, Wyvern watches. Change: Wyvern changes it, then puts it back.</summary>
-public enum StepKind { Readings, Observe, Change }
+/// <summary>
+/// Readings: live values to judge. Observe: press a key, Wyvern watches. Change: Wyvern changes it, then puts it back.
+/// Measure: Wyvern changes it under CPU load and compares power and clock itself (see <see cref="ModeMeasurement"/>).
+/// </summary>
+public enum StepKind { Readings, Observe, Change, Measure }
 
 public enum StepAnswer { Unanswered, Yes, No, Skipped }
 
@@ -22,6 +25,20 @@ public sealed record VerifyResult(string Id, string Title, StepAnswer Answer, st
 public static class VerifyPlan
 {
     public const string MaxCooling = "maxCooling";
+    /// <summary>Where testers send their report (shown at the end of the wizard).</summary>
+    public const string ReportEmail = "info@noptic.net";
+
+    /// <summary>The MSI level names the app uses (Edit profile), for the profile's shiftMode value names.</summary>
+    public static string LevelName(string? valueName) => valueName switch
+    {
+        "eco" => "Super Battery",
+        "comfort" => "Normal",
+        "turbo" => "Extreme",
+        null => "this level",
+        _ => char.ToUpperInvariant(valueName[0]) + valueName[1..],
+    };
+
+    private const string KbdSkip = "Skip if your keyboard has no backlight, or has RGB lighting (that's run by its own chip, not the firmware).";
 
     public static IReadOnlyList<VerifyStep> For(EcController ec, bool maxCoolingAvailable)
     {
@@ -36,12 +53,8 @@ public static class VerifyPlan
 
         if (Readable("kbdBacklight"))
             steps.Add(new("kbdKey", StepKind.Observe, "Keyboard light key",
-                "Press your keyboard backlight key a few times (often Fn + F8, Fn + F9 or Fn + F10).",
+                "Press your keyboard backlight key a few times (often Fn + F8, Fn + F9 or Fn + F10). " + KbdSkip,
                 "Did the keyboard light change, and did Wyvern's number change with it?", "kbdBacklight", Optional: true));
-        if (Readable("shiftMode"))
-            steps.Add(new("modeKey", StepKind.Observe, "Performance mode key",
-                "If your laptop has a key or button for performance modes (some MSI laptops use Fn + F7), press it a few times. Skip if it hasn't.",
-                "Did Wyvern's mode change each time you pressed it?", "shiftMode", Optional: true));
         if (Readable("coolerBoost"))
             steps.Add(new("boostKey", StepKind.Observe, "Cooler Boost button",
                 "If your laptop has a Cooler Boost button or key, press it, wait for the fans, then press it again. Skip if it hasn't.",
@@ -49,12 +62,15 @@ public static class VerifyPlan
 
         if (Testable("kbdBacklight"))
             steps.Add(new("kbdChange", StepKind.Change, "Keyboard light (test)",
-                "Wyvern will change the keyboard light level, then put it back.",
-                "Did the keyboard light change when Wyvern changed it?", "kbdBacklight"));
+                "Wyvern will change the keyboard light level, then put it back. " + KbdSkip,
+                "Did the keyboard light change when Wyvern changed it?", "kbdBacklight", Optional: true));
         if (Testable("shiftMode"))
-            steps.Add(new("modeChange", StepKind.Change, "Performance mode (test)",
-                "Wyvern will switch the performance mode, then put it back.",
-                "Did the laptop keep working normally (no freeze, fans still running)?", "shiftMode"));
+            steps.Add(new("modeMeasure", StepKind.Measure, "MSI level (measured)",
+                "The MSI level (Super Battery, Normal, Extreme; MSI Center calls them its modes) sets the firmware's power " +
+                $"limits, so it only shows under load. Wyvern runs the CPU at full load for {ModeMeasurement.PhaseSeconds} s in your " +
+                $"current level, then {ModeMeasurement.PhaseSeconds} s in another, compares power and clock, and puts your level back. " +
+                "The fans may get louder.",
+                "Nothing to judge: Wyvern measures it. Click Run it.", "shiftMode"));
         if (Testable("coolerBoost"))
             steps.Add(new("boostChange", StepKind.Change, "Cooler Boost (test)",
                 "Wyvern will turn Cooler Boost on for a few seconds, then off again. The fans get loud.",
@@ -77,8 +93,9 @@ public static class VerifyPlan
     /// </summary>
     public static int? TestValue(SettingDefView s, int current) => s switch
     {
-        // Named modes: turbo, else eco (both clearly different from the usual comfort), else any other allowed value.
-        { Values: { Count: > 0 } v } => new[] { "turbo", "eco" }.Where(v.ContainsKey).Select(k => v[k])
+        // Named levels: eco (lower limits: the safe direction, and clearly measurable under load), else turbo, else any
+        // other allowed value.
+        { Values: { Count: > 0 } v } => new[] { "eco", "turbo" }.Where(v.ContainsKey).Select(k => v[k])
             .Concat(v.Values).Where(x => x != current).Select(x => (int?)x).FirstOrDefault(),
         { Min: int min, Max: int max } when s.Name == "chargeLimit" => current > 80 ? 80 : 100,
         { Min: int min, Max: int max } => current == max ? min : max,

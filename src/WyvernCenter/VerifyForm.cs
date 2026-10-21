@@ -5,7 +5,8 @@ namespace WyvernCenter;
 
 /// <summary>
 /// "Verify my laptop": a guided check for testers. Readings and key presses first (nothing changed), then, with
-/// consent, one setting at a time changed briefly and put back. The answers go into the support report.
+/// consent, one setting at a time changed briefly and put back; the MSI level is measured under CPU load instead of
+/// asked about. The answers go into the support report, which the tester emails to <see cref="VerifyPlan.ReportEmail"/>.
 /// </summary>
 public sealed class VerifyForm : Form
 {
@@ -15,13 +16,17 @@ public sealed class VerifyForm : Form
     private readonly IReadOnlyList<VerifyStep> steps;
     private readonly List<VerifyResult> results = new();
     private readonly Label lblStep, lblTitle, lblBody, lblLive, lblQuestion;
-    private readonly RButton btnPrimary, btnYes, btnNo, btnSkip;
+    private readonly RButton btnPrimary, btnYes, btnNo, btnSkip, btnCopy;
     private readonly System.Windows.Forms.Timer poll = new() { Interval = 600 };
     private readonly List<string> seen = new();
     private Page page = Page.Intro;
     private int index = -1;
     private bool consented, applied, polling, started, ended;
     private string applyNote = "";
+    // The measure step: the run in progress, the level names, and whether its result is in.
+    private ModeMeasurement? measure;
+    private string levelNow = "your level", levelTest = "the other level";
+    private bool measured, viewing;
 
     private VerifyStep Current => steps[index];
 
@@ -55,7 +60,7 @@ public sealed class VerifyForm : Form
         }
         lblStep = Add(18, 8.5f, color: Theme.ForeDim);
         lblTitle = Add(28, 13f, FontStyle.Bold);
-        lblBody = Add(66, 10f);
+        lblBody = Add(112, 10f);
         lblLive = Add(52, 11.5f, FontStyle.Bold, Theme.Accent);
         lblQuestion = Add(46, 10f, FontStyle.Bold);
 
@@ -70,18 +75,26 @@ public sealed class VerifyForm : Form
         btnYes = Button(1, "Yes", accent: true);
         btnNo = Button(2, "No");
         btnSkip = Button(3, "Skip");
-        Controls.AddRange(new Control[] { btnPrimary, btnYes, btnNo, btnSkip });
+        btnCopy = Button(1, "Copy email");
+        btnCopy.Visible = false;
+        Controls.AddRange(new Control[] { btnPrimary, btnYes, btnNo, btnSkip, btnCopy });
         ClientSize = new Size(w, y + bh + Theme.S(16));
 
         btnPrimary.Click += (_, _) => Primary();
         btnYes.Click += (_, _) => Answer(StepAnswer.Yes);
         btnNo.Click += (_, _) => Answer(StepAnswer.No);
         btnSkip.Click += (_, _) => Answer(StepAnswer.Skipped);
+        btnCopy.Click += (_, _) =>
+        {
+            try { Clipboard.SetText(VerifyPlan.ReportEmail); btnCopy.Text = "Copied"; }
+            catch { btnCopy.Text = "Couldn't copy"; }
+        };
         poll.Tick += (_, _) => Poll();
         HandleCreated += (_, _) => Theme.DarkTitleBar(Handle);
         FormClosed += (_, _) =>
         {
             poll.Dispose();
+            StopLoad();
             if (started && !ended) app.VerifyEnd(results); // puts back anything still changed
         };
         ShowIntro();
@@ -107,13 +120,17 @@ public sealed class VerifyForm : Form
         seen.Clear();
         applied = false;
         applyNote = "";
+        measure = null;
+        measured = false;
+        lblLive.ForeColor = Theme.Accent;
         if (index >= steps.Count) { ShowDone(); return; }
-        if (Current.Kind == StepKind.Change && !consented) { ShowConsent(); return; }
+        if (Current.Kind is StepKind.Change or StepKind.Measure && !consented) { ShowConsent(); return; }
         page = Page.Step;
         lblStep.Text = $"Step {index + 1} of {steps.Count} · " + Current.Kind switch
         {
             StepKind.Readings => "readings, nothing changes",
             StepKind.Observe => "you press a key, nothing changes",
+            StepKind.Measure => "Wyvern measures this under load, then puts it back",
             _ => "Wyvern changes this briefly, then puts it back",
         };
         lblTitle.Text = Current.Title;
@@ -122,6 +139,18 @@ public sealed class VerifyForm : Form
         lblLive.Text = "";
         if (Current.Kind == StepKind.Change)
             SetButtons(primary: "Change it", answers: false, skip: true);
+        else if (Current.Kind == StepKind.Measure)
+        {
+            SetButtons(primary: "Run it", answers: false, skip: true);
+            var step = Current;
+            app.VerifyLevelNames(step, (now, test) =>
+            {
+                if (IsDisposed || page != Page.Step || Current != step) return;
+                levelNow = now;
+                levelTest = test;
+                lblLive.Text = $"Now: {now}. Test: {test}.";
+            });
+        }
         else
             SetButtons(primary: null, answers: true, skip: true);
         poll.Start();
@@ -155,8 +184,8 @@ public sealed class VerifyForm : Form
         lblTitle.Text = "Thank you!";
         lblBody.Text = $"{yes} confirmed, {no} not working, {results.Count - yes - no} skipped. Everything Wyvern changed has been put back.";
         lblLive.Text = "";
-        lblQuestion.Text = "Create the support report and send it with your answers.";
-        SetButtons(primary: "Create report", answers: false, skip: true, skipText: "Close");
+        lblQuestion.Text = $"Create the support report, then email report.md and dsdt.aml to {VerifyPlan.ReportEmail}.";
+        SetButtons(primary: "Create report", answers: false, skip: true, skipText: "Close", copy: true);
     }
 
     // ---- Buttons ----------------------------------------------------------------------------------
@@ -179,6 +208,12 @@ public sealed class VerifyForm : Form
                 consented = true;
                 index--;
                 Next();
+                break;
+            case Page.Step when Current.Kind == StepKind.Measure && measured:
+                Next();
+                break;
+            case Page.Step when Current.Kind == StepKind.Measure && measure is null:
+                StartMeasure();
                 break;
             case Page.Step when Current.Kind == StepKind.Change && !applied:
                 btnPrimary.Enabled = btnSkip.Enabled = false;
@@ -208,7 +243,9 @@ public sealed class VerifyForm : Form
                 {
                     if (IsDisposed) return;
                     lblQuestion.ForeColor = error is null ? Theme.ForeMain : Theme.Warn;
-                    lblQuestion.Text = error is null ? "Saved and opened. Attach report.md (and dsdt.aml) to your message." : "Couldn't create it: " + error;
+                    lblQuestion.Text = error is null
+                        ? $"Saved, and its folder is open. Email report.md and dsdt.aml to {VerifyPlan.ReportEmail}."
+                        : "Couldn't create it: " + error;
                 });
                 break;
         }
@@ -220,6 +257,12 @@ public sealed class VerifyForm : Form
         if (page == Page.Done) { Close(); return; }
         poll.Stop();
         var step = Current;
+        if (step.Kind == StepKind.Measure)
+        {
+            if (measure is not null) FinishMeasure("stopped by you");
+            else { Record(step, StepAnswer.Skipped, "not run"); Next(); }
+            return;
+        }
         if (step.Kind == StepKind.Change && applied)
         {
             SetButtons(primary: null, answers: false, skip: false);
@@ -240,11 +283,99 @@ public sealed class VerifyForm : Form
     private void SkipAllChanges()
     {
         for (; index < steps.Count; index++)
-            if (steps[index].Kind == StepKind.Change) Record(steps[index], StepAnswer.Skipped, "tests not run");
+            if (steps[index].Kind is StepKind.Change or StepKind.Measure) Record(steps[index], StepAnswer.Skipped, "tests not run");
         ShowDone();
     }
 
     private void Record(VerifyStep step, StepAnswer answer, string notes) => results.Add(new VerifyResult(step.Id, step.Title, answer, notes));
+
+    // ---- Measure step ---------------------------------------------------------------------------
+    // Full CPU load in the current level, then in the test level (ModeMeasurement decides when). Samples come from the
+    // app's monitor while this window is a viewer. Every way out stops the load and puts the level back.
+
+    private void StartMeasure()
+    {
+        measure = new ModeMeasurement(DateTime.Now);
+        SetButtons(primary: null, answers: false, skip: true, skipText: "Stop");
+        lblQuestion.Text = "Running. The fans may get louder.";
+        app.SampleArrived += OnSample;
+        app.AddViewer();
+        viewing = true;
+        app.VerifyLoad(true);
+        lblLive.Text = measure.Progress(DateTime.Now, null, levelNow);
+    }
+
+    private void OnSample()
+    {
+        if (IsDisposed || page != Page.Step || measure is not { Phase: < 3 } m || app.LastSample is not { } s) return;
+        var now = DateTime.Now;
+        switch (m.Sample(s, now, app.FailsafeEngaged))
+        {
+            case MeasureEvent.SwitchNow:
+                lblLive.Text = $"Switching to {levelTest}…";
+                btnSkip.Enabled = false;
+                var step = Current;
+                app.VerifyApply(step, (ok, note) =>
+                {
+                    if (IsDisposed) return;
+                    applied = true;
+                    applyNote = note;
+                    btnSkip.Enabled = true;
+                    if (m.Phase == 3) { app.VerifyRevert(step, (_, _) => { }); return; } // ended while switching
+                    if (ok) m.Switched(DateTime.Now);
+                    else FinishMeasure("couldn't switch the level: " + Trim(note));
+                });
+                break;
+            case MeasureEvent.Finished:
+                FinishMeasure(null);
+                break;
+            case MeasureEvent.Stopped:
+                FinishMeasure(m.StopReason);
+                break;
+            default:
+                lblLive.Text = m.Progress(now, s, m.Phase == 1 ? levelNow : levelTest);
+                break;
+        }
+    }
+
+    private void FinishMeasure(string? stopped)
+    {
+        if (measure is not { } m || measured) return;
+        m.Stop(stopped ?? "finished");
+        StopLoad();
+        var step = Current;
+        var (answer, summary) = stopped is null
+            ? ModeMeasurement.Verdict(m.Before, m.After, levelNow, levelTest)
+            : (StepAnswer.Skipped, "stopped: " + stopped);
+        SetButtons(primary: null);
+        lblLive.Text = "Putting your level back…";
+
+        void Show(string revertNote)
+        {
+            if (IsDisposed) return;
+            Record(step, answer, string.Join("; ", new[] { summary, applyNote, revertNote }.Where(n => n != "")));
+            measured = true;
+            lblLive.ForeColor = answer == StepAnswer.Yes ? Theme.Accent : Theme.Warn;
+            lblLive.Text = answer switch
+            {
+                StepAnswer.Yes => "Works: the level changed the CPU's power.",
+                StepAnswer.No => "No clear difference between the levels.",
+                _ => "Couldn't measure it" + (stopped is null ? "." : $": {stopped}."),
+            };
+            lblQuestion.Text = (m.Before is null ? "" : $"{levelNow}: {ModeMeasurement.Show(m.Before)}\n") +
+                               (m.After is null ? "" : $"{levelTest}: {ModeMeasurement.Show(m.After)}");
+            SetButtons(primary: "Next");
+        }
+        if (applied) app.VerifyRevert(step, (ok, note) => Show(note + (ok ? "" : " (NOT put back)")));
+        else Show("");
+    }
+
+    private void StopLoad()
+    {
+        app.VerifyLoad(false);
+        app.SampleArrived -= OnSample;
+        if (viewing) { app.RemoveViewer(); viewing = false; }
+    }
 
     // ---- Live values ------------------------------------------------------------------------------
 
@@ -252,7 +383,7 @@ public sealed class VerifyForm : Form
     {
         if (polling || page != Page.Step || IsDisposed) return;
         var step = Current;
-        if (step.Kind == StepKind.Change && !applied) return;
+        if (step.Kind == StepKind.Measure || step.Kind == StepKind.Change && !applied) return;
         polling = true;
         if (step.Setting is null || step.Setting == VerifyPlan.MaxCooling)
             app.VerifySensors(text =>
@@ -280,8 +411,9 @@ public sealed class VerifyForm : Form
         if (seen.Count > 12) seen.RemoveAt(1);
     }
 
-    private void SetButtons(string? primary, bool answers = false, bool skip = false, string skipText = "Skip")
+    private void SetButtons(string? primary, bool answers = false, bool skip = false, string skipText = "Skip", bool copy = false)
     {
+        btnCopy.Visible = copy;
         btnPrimary.Visible = btnPrimary.Enabled = primary is not null;
         if (primary is not null) btnPrimary.Text = primary;
         btnYes.Visible = btnNo.Visible = btnYes.Enabled = btnNo.Enabled = answers;
