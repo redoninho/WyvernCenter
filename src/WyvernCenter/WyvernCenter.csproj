@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationVisualStyles>true</ApplicationVisualStyles>
+    <ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <!-- Older names (M-Helper, MSI-Helper): the data folder and startup task are migrated from them on first start. -->
+    <AssemblyName>WyvernCenter</AssemblyName>
+    <Product>Wyvern Center</Product>
+    <AssemblyTitle>Wyvern Center</AssemblyTitle>
+    <Company>Wyvern Center</Company>
+    <RootNamespace>WyvernCenter</RootNamespace>
+    <Version>0.5.0</Version>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TieredPGO>false</TieredPGO>
+    <!-- Elevated at logon: never honour DOTNET_STARTUP_HOOKS from the user environment. -->
+    <StartupHookSupport>false</StartupHookSupport>
+  </PropertyGroup>
+
+  <!-- The wyvern: the exe's icon, and embedded for the windows and the tray (all sizes 16-256 px are in the .ico). -->
+  <PropertyGroup>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\app.ico" LogicalName="app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Smaller GC heap for a tray app that is idle most of the time. -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WyvernCenter.Core\WyvernCenter.Core.csproj" />
+  </ItemGroup>
+
+</Project>

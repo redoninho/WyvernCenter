@@ -1,0 +1,36 @@
+name: Support my laptop
+description: Ask for your MSI laptop model (or EC firmware version) to be supported.
+title: "[Model] "
+labels: ["new model"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! In Wyvern Center open **Settings → This laptop → Create support report**. A folder opens with `report.md` and `dsdt.aml`.
+        Paste `report.md` below and attach `dsdt.aml` (drag it into the box). Neither contains serial numbers or personal data.
+  - type: input
+    id: model
+    attributes:
+      label: Laptop model
+      placeholder: e.g. MSI GF65 Thin 10UE
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Support report (report.md)
+      description: Paste the whole file, and attach dsdt.aml.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: msi-center
+    attributes:
+      label: What MSI Center does (optional, very helpful)
+      description: Which modes MSI Center offers on this laptop (Extreme Performance, Balanced, Silent, Super Battery, Cooler Boost, battery limits…), and anything you noticed when switching them.
+  - type: checkboxes
+    id: testing
+    attributes:
+      label: Testing
+      options:
+        - label: I can test a draft profile on this laptop and report back.

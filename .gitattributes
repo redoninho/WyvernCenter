@@ -1,0 +1,11 @@
+# Line endings are normalised in the repository; checkouts get the platform's own.
+* text=auto
+
+*.cs      text diff=csharp
+*.sln     text eol=crlf
+*.csproj  text eol=crlf
+*.ps1     text eol=crlf
+
+*.png     binary
+*.ico     binary
+*.aml     binary

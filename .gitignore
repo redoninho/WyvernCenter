@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+*.user
+.re/
+dist/
+
+# Internal working notes (kept locally, not published)
+docs/probe/
+docs/superpowers/
+docs/ux/
+.superpowers/
+release/

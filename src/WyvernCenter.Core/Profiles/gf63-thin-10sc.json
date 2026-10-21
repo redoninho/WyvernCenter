@@ -1,0 +1,339 @@
+{
+  "name": "MSI GF63 Thin 10SC",
+  "firmware": [
+    "16R5EMS1.102"
+  ],
+  "msiServices": [
+    "Micro Star SCM",
+    "MSI Foundation Service",
+    "MSI Sendevsvc",
+    "MSI_Central_Service",
+    "MSI_Companion_Service"
+  ],
+  "curve": {
+    "minSpeed": 0,
+    "maxSpeed": 150,
+    "floorAtIndex": 5,
+    "floorSpeed": 100
+  },
+  "settings": {
+    "shiftMode": {
+      "route": "scm",
+      "class": "System",
+      "index": 7,
+      "mask": "0xFF",
+      "values": {
+        "comfort": "0xC1",
+        "eco": "0xC2",
+        "turbo": "0xC4"
+      },
+      "verified": true,
+      "note": "EC 0xF2. Observed 2026-10-14 from MSI Center: Extreme Performance 0xC4, Balanced/Silent 0xC1, Super Battery 0xC2.",
+      "testable": true
+    },
+    "fanMode": {
+      "route": "scm",
+      "class": "System",
+      "index": 9,
+      "mask": "0xFF",
+      "values": {
+        "auto": "0x0D",
+        "silent": "0x1D",
+        "advanced": "0x8D"
+      },
+      "verified": true,
+      "note": "EC 0xF4. Observed: auto 0x0D (Extreme Perf, Super Battery), silent 0x1D (Silent), advanced 0x8D (Balanced)."
+    },
+    "kbdBacklight": {
+      "route": "scm",
+      "class": "System",
+      "index": 8,
+      "mask": "0x03",
+      "min": 0,
+      "max": 3,
+      "verified": true,
+      "note": "EC 0xF3 low 2 bits. Observed 0x83 (level 3) <-> 0x80 (off) when Super Battery toggled.",
+      "testable": true
+    },
+    "cpuFanTachLo": {
+      "route": "scm",
+      "class": "Ap",
+      "index": 2,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuFanTachHi": {
+      "route": "scm",
+      "class": "Ap",
+      "index": 3,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuFanTachLo": {
+      "route": "scm",
+      "class": "Ap",
+      "index": 4,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuFanTachHi": {
+      "route": "scm",
+      "class": "Ap",
+      "index": 5,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuTemp": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 1,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuFan": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 2,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuTemp": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 1,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuFan": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 2,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveTemp0": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 4,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed0": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 11,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "cpuCurveTemp1": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 5,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed1": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 12,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "cpuCurveTemp2": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 6,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed2": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 13,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "cpuCurveTemp3": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 7,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed3": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 14,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "cpuCurveTemp4": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 8,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed4": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 15,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "cpuCurveTemp5": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 9,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed5": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 16,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "gpuCurveTemp0": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 4,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed0": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 11,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "gpuCurveTemp1": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 5,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed1": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 12,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "gpuCurveTemp2": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 6,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed2": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 13,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "gpuCurveTemp3": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 7,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed3": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 14,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "gpuCurveTemp4": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 8,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed4": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 15,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "gpuCurveTemp5": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 9,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed5": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 16,
+      "mask": "0xFF",
+      "min": 0,
+      "max": 150,
+      "verified": true,
+      "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    }
+  }
+}

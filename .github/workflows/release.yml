@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write      # build attestation
+  attestations: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Test
+        run: dotnet test --configuration Release
+      - name: Publish single-file exe
+        run: .\publish.ps1
+        shell: pwsh
+      - name: Zip and checksum
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}".TrimStart('v')
+          $zip = "dist\WyvernCenter-$v.zip"
+          Compress-Archive -Path dist\WyvernCenter.exe -DestinationPath $zip -CompressionLevel Optimal
+          foreach ($f in @($zip, "dist\WyvernCenter.exe")) {
+            (Get-FileHash $f -Algorithm SHA256).Hash.ToLower() + "  " + (Split-Path $f -Leaf) | Out-File -Encoding ascii "$f.sha256"
+          }
+          "ZIP=$zip" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/WyvernCenter.exe
+            dist/WyvernCenter-*.zip
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/WyvernCenter-*.zip
+            dist/WyvernCenter-*.zip.sha256
+            dist/WyvernCenter.exe.sha256
+          generate_release_notes: true

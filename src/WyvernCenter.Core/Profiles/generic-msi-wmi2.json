@@ -1,0 +1,377 @@
+{
+  "name": "MSI laptop (WMI v2, read-only beta)",
+  "generic": true,
+  "interface": "wmi2",
+  "note": "Every 11th-gen+ MSI laptop. Addresses are the fixed ones MSI Center itself uses on all WMI2 models and match msi-ec layouts G2_0-G2_10. Read-only until testers confirm them (see docs/research/wmi2-msi-acpi.md).",
+  "firmware": [],
+  "msiServices": [
+    "MSI Foundation Service",
+    "MSI_Central_Service",
+    "MSI_Companion_Service",
+    "MSI_VoiceControl_Service",
+    "MSI Sendevsvc",
+    "MSIAPService"
+  ],
+  "curve": {
+    "minSpeed": 0,
+    "maxSpeed": 150,
+    "floorAtIndex": 5,
+    "floorSpeed": 100
+  },
+  "settings": {
+    "shiftMode": {
+      "route": "wmi2",
+      "offset": "0xD2",
+      "mask": "0xFF",
+      "values": {
+        "comfort": "0xC1",
+        "eco": "0xC2",
+        "turbo": "0xC4"
+      },
+      "expect": {
+        "mask": "0xFF",
+        "values": [
+          "0xC0",
+          "0xC1",
+          "0xC2",
+          "0xC3",
+          "0xC4"
+        ]
+      },
+      "verified": false,
+      "readOnly": true,
+      "note": "EC 0xD2 (WMI1: 0xF2). Same codes as WMI1 laptops (MSI Center's WMI2 code and msi-ec G2 layouts).",
+      "testable": true
+    },
+    "fanMode": {
+      "route": "wmi2",
+      "offset": "0xD4",
+      "mask": "0xFF",
+      "values": {
+        "auto": "0x0D",
+        "silent": "0x1D",
+        "advanced": "0x8D"
+      },
+      "expect": {
+        "mask": "0x0F",
+        "values": [
+          "0x0D"
+        ]
+      },
+      "verified": false,
+      "readOnly": true,
+      "note": "EC 0xD4 (WMI1: 0xF4). auto 0x0D / silent 0x1D per msi-ec; MSI Center sets bit 6 and clears bit 7 for a custom curve (0x4D) where msi-ec says 0x8D: confirmed per laptop before any write."
+    },
+    "kbdBacklight": {
+      "route": "wmi2",
+      "offset": "0xD3",
+      "mask": "0x03",
+      "min": 0,
+      "max": 3,
+      "expect": {
+        "mask": "0xFC",
+        "values": [
+          "0x80"
+        ]
+      },
+      "verified": false,
+      "readOnly": true,
+      "note": "EC 0xD3 low 2 bits (WMI1: 0xF3). Not present on every WMI2 model.",
+      "testable": true
+    },
+    "coolerBoost": {
+      "route": "wmi2",
+      "offset": "0x98",
+      "mask": "0x80",
+      "min": 0,
+      "max": 1,
+      "verified": false,
+      "readOnly": true,
+      "note": "EC 0x98 bit 7, same as WMI1.",
+      "testable": true
+    },
+    "chargeLimit": {
+      "route": "wmi2",
+      "offset": "0xD7",
+      "mask": "0x7F",
+      "min": 50,
+      "max": 100,
+      "verified": false,
+      "readOnly": true,
+      "note": "EC 0xD7 (WMI1: 0xEF): bit 7 kept, low 7 bits = percent (MSI uses 100/80/60).",
+      "testable": true
+    },
+    "cpuTemp": {
+      "route": "wmi2",
+      "offset": "0x68",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "EC 0x68, same as WMI1 (msi-ec G2 rt_temp)."
+    },
+    "cpuFan": {
+      "route": "wmi2",
+      "offset": "0x71",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "EC 0x71 fan duty, same as WMI1 (msi-ec G2 rt_fan_speed)."
+    },
+    "gpuTemp": {
+      "route": "wmi2",
+      "offset": "0x80",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "EC 0x80, same as WMI1."
+    },
+    "gpuFan": {
+      "route": "wmi2",
+      "offset": "0x89",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "EC 0x89 fan duty, same as WMI1."
+    },
+    "cpuFanTachHi": {
+      "route": "wmi2",
+      "block": {
+        "method": "GetFan",
+        "parameter": 0,
+        "byte": 0
+      },
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "Get_Fan(0) byte 0: CPU tachometer high byte (MSI: rpm = 480000 / raw)."
+    },
+    "cpuFanTachLo": {
+      "route": "wmi2",
+      "block": {
+        "method": "GetFan",
+        "parameter": 0,
+        "byte": 1
+      },
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "Get_Fan(0) byte 1: CPU tachometer low byte."
+    },
+    "gpuFanTachHi": {
+      "route": "wmi2",
+      "block": {
+        "method": "GetFan",
+        "parameter": 0,
+        "byte": 2
+      },
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "Get_Fan(0) byte 2: GPU tachometer high byte."
+    },
+    "gpuFanTachLo": {
+      "route": "wmi2",
+      "block": {
+        "method": "GetFan",
+        "parameter": 0,
+        "byte": 3
+      },
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "Get_Fan(0) byte 3: GPU tachometer low byte."
+    },
+    "cpuCurveTemp0": {
+      "route": "wmi2",
+      "offset": "0x69",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve temperature: EC 0x69-0x6E as on WMI1 (unconfirmed on WMI2)."
+    },
+    "cpuCurveSpeed0": {
+      "route": "wmi2",
+      "offset": "0x72",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+    },
+    "gpuCurveTemp0": {
+      "route": "wmi2",
+      "offset": "0x81",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve temperature: EC 0x81-0x86 as on WMI1 (unconfirmed on WMI2)."
+    },
+    "gpuCurveSpeed0": {
+      "route": "wmi2",
+      "offset": "0x8A",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+    },
+    "cpuCurveTemp1": {
+      "route": "wmi2",
+      "offset": "0x6A",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve temperature: EC 0x69-0x6E as on WMI1 (unconfirmed on WMI2)."
+    },
+    "cpuCurveSpeed1": {
+      "route": "wmi2",
+      "offset": "0x73",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+    },
+    "gpuCurveTemp1": {
+      "route": "wmi2",
+      "offset": "0x82",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve temperature: EC 0x81-0x86 as on WMI1 (unconfirmed on WMI2)."
+    },
+    "gpuCurveSpeed1": {
+      "route": "wmi2",
+      "offset": "0x8B",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+    },
+    "cpuCurveTemp2": {
+      "route": "wmi2",
+      "offset": "0x6B",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve temperature: EC 0x69-0x6E as on WMI1 (unconfirmed on WMI2)."
+    },
+    "cpuCurveSpeed2": {
+      "route": "wmi2",
+      "offset": "0x74",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+    },
+    "gpuCurveTemp2": {
+      "route": "wmi2",
+      "offset": "0x83",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve temperature: EC 0x81-0x86 as on WMI1 (unconfirmed on WMI2)."
+    },
+    "gpuCurveSpeed2": {
+      "route": "wmi2",
+      "offset": "0x8C",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+    },
+    "cpuCurveTemp3": {
+      "route": "wmi2",
+      "offset": "0x6C",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve temperature: EC 0x69-0x6E as on WMI1 (unconfirmed on WMI2)."
+    },
+    "cpuCurveSpeed3": {
+      "route": "wmi2",
+      "offset": "0x75",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+    },
+    "gpuCurveTemp3": {
+      "route": "wmi2",
+      "offset": "0x84",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve temperature: EC 0x81-0x86 as on WMI1 (unconfirmed on WMI2)."
+    },
+    "gpuCurveSpeed3": {
+      "route": "wmi2",
+      "offset": "0x8D",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+    },
+    "cpuCurveTemp4": {
+      "route": "wmi2",
+      "offset": "0x6D",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve temperature: EC 0x69-0x6E as on WMI1 (unconfirmed on WMI2)."
+    },
+    "cpuCurveSpeed4": {
+      "route": "wmi2",
+      "offset": "0x76",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+    },
+    "gpuCurveTemp4": {
+      "route": "wmi2",
+      "offset": "0x85",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve temperature: EC 0x81-0x86 as on WMI1 (unconfirmed on WMI2)."
+    },
+    "gpuCurveSpeed4": {
+      "route": "wmi2",
+      "offset": "0x8E",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+    },
+    "cpuCurveTemp5": {
+      "route": "wmi2",
+      "offset": "0x6E",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve temperature: EC 0x69-0x6E as on WMI1 (unconfirmed on WMI2)."
+    },
+    "cpuCurveSpeed5": {
+      "route": "wmi2",
+      "offset": "0x77",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+    },
+    "gpuCurveTemp5": {
+      "route": "wmi2",
+      "offset": "0x86",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve temperature: EC 0x81-0x86 as on WMI1 (unconfirmed on WMI2)."
+    },
+    "gpuCurveSpeed5": {
+      "route": "wmi2",
+      "offset": "0x8F",
+      "mask": "0xFF",
+      "verified": false,
+      "readOnly": true,
+      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+    }
+  }
+}
