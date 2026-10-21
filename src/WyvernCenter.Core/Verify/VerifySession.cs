@@ -28,7 +28,8 @@ public sealed class VerifySession
     public IReadOnlyList<string> End()
     {
         var notes = new List<string>();
-        foreach (var name in _before.Keys.ToList()) notes.Add(RevertSetting(name).Note);
+        // Fan mode first: once it's back, a raised test curve is no longer followed.
+        foreach (var name in _before.Keys.OrderBy(n => n == "fanMode" ? 0 : 1).ToList()) notes.Add(RevertSetting(name).Note);
         if (_maxCoolingOn) notes.Add(SetMaxCooling(false).Note);
         _ec.EndTest();
         return notes;
@@ -68,12 +69,65 @@ public sealed class VerifySession
         try { current = _ec.Get(name); }
         catch (Exception ex) { return (false, $"{name}: couldn't read it first ({ex.Message})"); }
         if (VerifyPlan.TestValue(SettingDefView.Of(def), current) is not int test) return (false, $"{name}: no other value to try");
+        return Write(name, current, test);
+    }
 
+    // ---- Fan-curve check (WMI v2) -----------------------------------------------------------
+
+    /// <summary>
+    /// Both curves to their own top speed: every point becomes the curve's fastest point, so no scale has to be
+    /// assumed and the fans can only get faster. Hottest point first, so the curve keeps rising after every write.
+    /// </summary>
+    public (bool Ok, string Note) RaiseCurves()
+    {
+        var notes = new List<string>();
+        foreach (var side in new[] { "cpu", "gpu" })
+        {
+            int[] points;
+            try { points = Enumerable.Range(0, VerifyPlan.CurvePointCount).Select(i => _ec.Get($"{side}CurveSpeed{i}")).ToArray(); }
+            catch (Exception ex) { return (false, $"{side} curve: couldn't read it ({ex.Message})"); }
+            var top = points.Max();
+            for (var i = points.Length - 1; i >= 0; i--)
+            {
+                if (points[i] == top) continue;
+                var r = TestWrite($"{side}CurveSpeed{i}", top);
+                if (!r.Ok) return (false, r.Note);
+            }
+            notes.Add($"{side} curve {string.Join(",", points)} → all {top}");
+        }
+        return (true, string.Join("; ", notes));
+    }
+
+    public (bool Ok, string Note) SetFanMode(int value) => TestWrite("fanMode", value);
+
+    public (bool Ok, string Note) PutFanModeBack() => RevertSetting("fanMode");
+
+    /// <summary>Fan mode first (then the raised curve is no longer followed), then every curve point.</summary>
+    public (bool Ok, string Note) PutFansBack()
+    {
+        var results = new[] { RevertSetting("fanMode") }.Concat(VerifyPlan.CurvePoints.Select(RevertSetting)).ToList();
+        var failed = results.Where(r => !r.Ok).ToList();
+        return (failed.Count == 0, failed.Count == 0 ? "fans put back" : string.Join("; ", failed.Select(f => f.Note)));
+    }
+
+    private (bool Ok, string Note) TestWrite(string name, int value)
+    {
+        if (!_ec.CanTest(name)) return (false, $"{name}: can't be tested on this laptop");
+        int current;
+        try { current = _ec.Get(name); }
+        catch (Exception ex) { return (false, $"{name}: couldn't read it first ({ex.Message})"); }
+        var (ok, note) = Write(name, current, value);
+        return (ok, $"{name} {note}");
+    }
+
+    /// <summary>One test write: the value from before is kept (first time only), so it always goes back.</summary>
+    private (bool Ok, string Note) Write(string name, int current, int value)
+    {
         _before.TryAdd(name, current);
-        var r = _ec.TestSet(name, test);
+        var r = _ec.TestSet(name, value);
         var back = _ec.TryGet(name);
-        return (r.Ok && back == test,
-            $"{Show(name, current)} → {Show(name, test)}: {(r.Ok ? "accepted" : r.Message)}, read back {(back is int b ? Show(name, b) : "nothing")}");
+        return (r.Ok && back == value,
+            $"{Show(name, current)} → {Show(name, value)}: {(r.Ok ? "accepted" : r.Message)}, read back {(back is int b ? Show(name, b) : "nothing")}");
     }
 
     public (bool Ok, string Note) Revert(VerifyStep step) =>

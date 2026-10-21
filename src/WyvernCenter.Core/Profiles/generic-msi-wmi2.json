@@ -50,7 +50,8 @@
       "values": {
         "auto": "0x0D",
         "silent": "0x1D",
-        "advanced": "0x8D"
+        "advanced": "0x8D",
+        "advancedMsi": "0x4D"
       },
       "expect": {
         "mask": "0x0F",
@@ -60,7 +61,8 @@
       },
       "verified": false,
       "readOnly": true,
-      "note": "EC 0xD4 (WMI1: 0xF4). auto 0x0D / silent 0x1D per msi-ec; MSI Center sets bit 6 and clears bit 7 for a custom curve (0x4D) where msi-ec says 0x8D: confirmed per laptop before any write."
+      "note": "EC 0xD4 (WMI1: 0xF4). auto 0x0D / silent 0x1D per msi-ec. A custom curve is bit 7 per msi-ec (advanced, 0x8D) but bit 6 with bit 7 clear in MSI Center's own code (advancedMsi, 0x4D). The wizard's fan-curve check finds out which one this laptop follows; the app only uses 'advanced' once a model is verified.",
+      "testable": true
     },
     "kbdBacklight": {
       "route": "wmi2",
@@ -191,11 +193,18 @@
     },
     "cpuCurveSpeed0": {
       "route": "wmi2",
-      "offset": "0x72",
+      "block": {
+        "method": "GetFan",
+        "parameter": 1,
+        "byte": 1
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+      "testable": true,
+      "note": "CPU curve speed point 0: Get_Fan(1) byte 1, written with Set_Fan(1) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "gpuCurveTemp0": {
       "route": "wmi2",
@@ -207,11 +216,18 @@
     },
     "gpuCurveSpeed0": {
       "route": "wmi2",
-      "offset": "0x8A",
+      "block": {
+        "method": "GetFan",
+        "parameter": 2,
+        "byte": 1
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+      "testable": true,
+      "note": "GPU curve speed point 0: Get_Fan(2) byte 1, written with Set_Fan(2) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "cpuCurveTemp1": {
       "route": "wmi2",
@@ -223,11 +239,18 @@
     },
     "cpuCurveSpeed1": {
       "route": "wmi2",
-      "offset": "0x73",
+      "block": {
+        "method": "GetFan",
+        "parameter": 1,
+        "byte": 2
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+      "testable": true,
+      "note": "CPU curve speed point 1: Get_Fan(1) byte 2, written with Set_Fan(1) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "gpuCurveTemp1": {
       "route": "wmi2",
@@ -239,11 +262,18 @@
     },
     "gpuCurveSpeed1": {
       "route": "wmi2",
-      "offset": "0x8B",
+      "block": {
+        "method": "GetFan",
+        "parameter": 2,
+        "byte": 2
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+      "testable": true,
+      "note": "GPU curve speed point 1: Get_Fan(2) byte 2, written with Set_Fan(2) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "cpuCurveTemp2": {
       "route": "wmi2",
@@ -255,11 +285,18 @@
     },
     "cpuCurveSpeed2": {
       "route": "wmi2",
-      "offset": "0x74",
+      "block": {
+        "method": "GetFan",
+        "parameter": 1,
+        "byte": 3
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+      "testable": true,
+      "note": "CPU curve speed point 2: Get_Fan(1) byte 3, written with Set_Fan(1) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "gpuCurveTemp2": {
       "route": "wmi2",
@@ -271,11 +308,18 @@
     },
     "gpuCurveSpeed2": {
       "route": "wmi2",
-      "offset": "0x8C",
+      "block": {
+        "method": "GetFan",
+        "parameter": 2,
+        "byte": 3
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+      "testable": true,
+      "note": "GPU curve speed point 2: Get_Fan(2) byte 3, written with Set_Fan(2) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "cpuCurveTemp3": {
       "route": "wmi2",
@@ -287,11 +331,18 @@
     },
     "cpuCurveSpeed3": {
       "route": "wmi2",
-      "offset": "0x75",
+      "block": {
+        "method": "GetFan",
+        "parameter": 1,
+        "byte": 4
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+      "testable": true,
+      "note": "CPU curve speed point 3: Get_Fan(1) byte 4, written with Set_Fan(1) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "gpuCurveTemp3": {
       "route": "wmi2",
@@ -303,11 +354,18 @@
     },
     "gpuCurveSpeed3": {
       "route": "wmi2",
-      "offset": "0x8D",
+      "block": {
+        "method": "GetFan",
+        "parameter": 2,
+        "byte": 4
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+      "testable": true,
+      "note": "GPU curve speed point 3: Get_Fan(2) byte 4, written with Set_Fan(2) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "cpuCurveTemp4": {
       "route": "wmi2",
@@ -319,11 +377,18 @@
     },
     "cpuCurveSpeed4": {
       "route": "wmi2",
-      "offset": "0x76",
+      "block": {
+        "method": "GetFan",
+        "parameter": 1,
+        "byte": 5
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+      "testable": true,
+      "note": "CPU curve speed point 4: Get_Fan(1) byte 5, written with Set_Fan(1) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "gpuCurveTemp4": {
       "route": "wmi2",
@@ -335,11 +400,18 @@
     },
     "gpuCurveSpeed4": {
       "route": "wmi2",
-      "offset": "0x8E",
+      "block": {
+        "method": "GetFan",
+        "parameter": 2,
+        "byte": 5
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+      "testable": true,
+      "note": "GPU curve speed point 4: Get_Fan(2) byte 5, written with Set_Fan(2) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "cpuCurveTemp5": {
       "route": "wmi2",
@@ -351,11 +423,18 @@
     },
     "cpuCurveSpeed5": {
       "route": "wmi2",
-      "offset": "0x77",
+      "block": {
+        "method": "GetFan",
+        "parameter": 1,
+        "byte": 6
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "CPU curve speed: EC 0x72-0x77 as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(1))."
+      "testable": true,
+      "note": "CPU curve speed point 5: Get_Fan(1) byte 6, written with Set_Fan(1) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     },
     "gpuCurveTemp5": {
       "route": "wmi2",
@@ -367,11 +446,18 @@
     },
     "gpuCurveSpeed5": {
       "route": "wmi2",
-      "offset": "0x8F",
+      "block": {
+        "method": "GetFan",
+        "parameter": 2,
+        "byte": 6
+      },
       "mask": "0xFF",
+      "min": 0,
+      "max": 150,
       "verified": false,
       "readOnly": true,
-      "note": "GPU curve speed: EC 0x8A-0x8F as on WMI1 (unconfirmed on WMI2; MSI writes curves via Set_Fan(2))."
+      "testable": true,
+      "note": "GPU curve speed point 5: Get_Fan(2) byte 6, written with Set_Fan(2) like MSI Center (the EC address stays hidden). Unconfirmed until a tester's fan-curve check passes."
     }
   }
 }

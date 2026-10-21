@@ -17,6 +17,14 @@ public sealed class FakeWmi2 : IWmi2Transport
     public byte EcFlags { get; set; } = 0x91; // TigerLake-class, layout 1.1
     public byte[] Tach { get; set; } = { 0x00, 0xC8, 0x01, 0x90 };
     public List<(Wmi2Method Method, byte[] Input)> Calls { get; } = new();
+    /// <summary>Get_Fan(1) CPU / Get_Fan(2) GPU payloads: byte 0 and 7 aren't curve points, 1-6 are.</summary>
+    public byte[][] FanBlocks { get; } =
+    {
+        Array.Empty<byte>(),
+        new byte[] { 0x11, 42, 91, 111, 134, 142, 150, 0x22 },
+        new byte[] { 0x33, 21, 58, 106, 133, 146, 150, 0x44 },
+    };
+    public bool RefuseSetFan { get; set; }
 
     public byte[] Call(Wmi2Method method, byte[] input)
     {
@@ -42,6 +50,13 @@ public sealed class FakeWmi2 : IWmi2Transport
                 break;
             case Wmi2Method.GetFan when input[0] == 0:
                 Tach.CopyTo(output, 1);
+                break;
+            case Wmi2Method.GetFan when input[0] is 1 or 2:
+                FanBlocks[input[0]].CopyTo(output, 1);
+                break;
+            case Wmi2Method.SetFan when input[0] is 1 or 2:
+                if (RefuseSetFan) { output[0] = 0; break; }
+                Array.Copy(input, 1, FanBlocks[input[0]], 0, Wmi2Ec.FanBlockLength);
                 break;
             default:
                 throw new AcpiWmiException(AcpiWmiException.ItemNotFound, method.ToString());

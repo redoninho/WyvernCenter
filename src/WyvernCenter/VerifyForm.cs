@@ -32,6 +32,11 @@ public sealed class VerifyForm : Form
 
     private static bool FanStep(VerifyStep s) => s.Setting is VerifyPlan.MaxCooling or "coolerBoost";
 
+    // The fan-curve check (WMI v2): the run in progress and what the writes reported.
+    private FanCurveCheck? fanCheck;
+    private string fanNotes = "";
+    private bool finishingFans;
+
     private VerifyStep Current => steps[index];
 
     public VerifyForm(AppController app)
@@ -127,6 +132,9 @@ public sealed class VerifyForm : Form
         measure = null;
         measured = false;
         fansBefore = "";
+        fanCheck = null;
+        fanNotes = "";
+        finishingFans = false;
         lblLive.ForeColor = Theme.Accent;
         if (index >= steps.Count) { ShowDone(); return; }
         if (Current.Kind is StepKind.Change or StepKind.Measure && !consented) { ShowConsent(); return; }
@@ -144,6 +152,8 @@ public sealed class VerifyForm : Form
         lblLive.Text = "";
         if (Current.Kind == StepKind.Change)
             SetButtons(primary: "Change it", answers: false, skip: true);
+        else if (Current.Kind == StepKind.Measure && Current.Setting == VerifyPlan.FanCurve)
+            SetButtons(primary: "Run it", answers: false, skip: true);
         else if (Current.Kind == StepKind.Measure)
         {
             SetButtons(primary: "Run it", answers: false, skip: true);
@@ -217,8 +227,9 @@ public sealed class VerifyForm : Form
             case Page.Step when Current.Kind == StepKind.Measure && measured:
                 Next();
                 break;
-            case Page.Step when Current.Kind == StepKind.Measure && measure is null:
-                StartMeasure();
+            case Page.Step when Current.Kind == StepKind.Measure && measure is null && fanCheck is null:
+                if (Current.Setting == VerifyPlan.FanCurve) StartFanCheck();
+                else StartMeasure();
                 break;
             case Page.Step when Current.Kind == StepKind.Change && !applied:
                 btnPrimary.Enabled = btnSkip.Enabled = false;
@@ -266,6 +277,7 @@ public sealed class VerifyForm : Form
         if (step.Kind == StepKind.Measure)
         {
             if (measure is not null) FinishMeasure("stopped by you");
+            else if (fanCheck is not null) FinishFanCheck("stopped by you");
             else { Record(step, StepAnswer.Skipped, "not run"); Next(); }
             return;
         }
@@ -377,6 +389,103 @@ public sealed class VerifyForm : Form
         else Show("");
     }
 
+    // ---- Fan-curve check -------------------------------------------------------------------------
+    // FanCurveCheck decides what to do next from the fan readings (polled here); every write goes through the
+    // session, and every way out puts the fans back (fan mode first, then the curves).
+
+    private void StartFanCheck()
+    {
+        SetButtons(primary: null, answers: false, skip: true, skipText: "Stop");
+        lblQuestion.Text = "Running. The fans will get loud.";
+        lblLive.Text = "Reading the fan mode…";
+        var step = Current;
+        app.VerifyRead("fanMode", mode =>
+        {
+            if (IsDisposed || page != Page.Step || Current != step) return;
+            fanCheck = new FanCurveCheck(FanCurveCheck.Candidates(mode ?? 0), DateTime.Now);
+            if (mode is int m) fanNotes = $"fan mode was 0x{m:X2}";
+            else HandleFan(fanCheck.Stop("couldn't read the fan mode"));
+        });
+    }
+
+    private void OnFanRpm(int? rpm)
+    {
+        if (IsDisposed || page != Page.Step || fanCheck is not { Now: not FanCurveCheck.Stage.Done } c) return;
+        var now = DateTime.Now;
+        var e = app.FailsafeEngaged ? c.Stop("the thermal failsafe engaged") : c.Sample(rpm, now);
+        if (c.Now != FanCurveCheck.Stage.Done) lblLive.Text = c.Progress(now);
+        HandleFan(e);
+    }
+
+    private void HandleFan(FanCheckEvent e)
+    {
+        if (fanCheck is not { } c) return;
+        switch (e)
+        {
+            case FanCheckEvent.TryCandidate:
+                var value = c.CandidateValue;
+                lblLive.Text = $"Trying {FanCurveCheck.Name(value)}…";
+                btnSkip.Enabled = false;
+                // The curves are raised every time (a no-op after the first): a candidate never runs on the old curve.
+                app.VerifyRun(s =>
+                {
+                    var raised = s.RaiseCurves();
+                    if (!raised.Ok) return raised;
+                    var mode = s.SetFanMode(value);
+                    return (mode.Ok, raised.Note + "; " + mode.Note);
+                }, (ok, note) =>
+                {
+                    if (IsDisposed) return;
+                    btnSkip.Enabled = true;
+                    fanNotes += (fanNotes == "" ? "" : "; ") + note;
+                    HandleFan(c.Applied(DateTime.Now, ok));
+                });
+                break;
+            case FanCheckEvent.PutModeBack:
+                lblLive.Text = "Putting the fan mode back…";
+                app.VerifyRun(s => s.PutFanModeBack(), (ok, note) =>
+                {
+                    if (IsDisposed) return;
+                    if (note != "") fanNotes += "; " + note;
+                    if (ok) c.ModeBack(DateTime.Now);
+                    else HandleFan(c.Stop("couldn't put the fan mode back"));
+                });
+                break;
+            case FanCheckEvent.Finished:
+                FinishFanCheck(null);
+                break;
+        }
+    }
+
+    private void FinishFanCheck(string? stoppedBy)
+    {
+        if (fanCheck is not { } c || measured || finishingFans) return;
+        finishingFans = true;
+        if (stoppedBy is not null) c.Stop(stoppedBy);
+        SetButtons(primary: null);
+        lblLive.Text = "Putting your fans back…";
+        var step = Current;
+        // Queued after any write still in flight, so it always runs last.
+        app.VerifyRun(s => s.PutFansBack(), (ok, note) =>
+        {
+            if (IsDisposed) return;
+            var (answer, summary) = c.Verdict();
+            Record(step, answer, string.Join("; ", new[] { summary, fanNotes, ok ? note : note + " (NOT put back)" }.Where(n => n != "")));
+            measured = true;
+            lblLive.ForeColor = answer == StepAnswer.Yes ? Theme.Accent : Theme.Warn;
+            lblLive.Text = answer switch
+            {
+                StepAnswer.Yes => $"Works: custom curves use {FanCurveCheck.Name(c.Confirmed!.Value)}.",
+                StepAnswer.No => "Neither setting sped the fans up.",
+                _ => $"Couldn't finish: {c.StopReason}.",
+            };
+            lblQuestion.Text = string.Join("\n", c.Tried.Select(t =>
+                $"{FanCurveCheck.Name(t.Value)}: {(t.PeakRpm is int peak ? $"{t.BeforeRpm:F0} → {peak} RPM" : "couldn't be written")}"))
+                + (ok ? "" : "\nFans NOT all put back: " + Trim(note));
+            SetButtons(primary: "Next");
+        });
+    }
+
     private void StopLoad()
     {
         app.VerifyLoad(false);
@@ -390,7 +499,18 @@ public sealed class VerifyForm : Form
     {
         if (polling || page != Page.Step || IsDisposed) return;
         var step = Current;
-        if (step.Kind == StepKind.Measure || step.Kind == StepKind.Change && !applied) return;
+        if (step.Kind == StepKind.Measure)
+        {
+            if (fanCheck is not { Now: not FanCurveCheck.Stage.Done }) return;
+            polling = true;
+            app.VerifyFanRpm(rpm =>
+            {
+                polling = false;
+                OnFanRpm(rpm);
+            });
+            return;
+        }
+        if (step.Kind == StepKind.Change && !applied) return;
         polling = true;
         if (step.Setting is null || FanStep(step))
             app.VerifySensors(text =>

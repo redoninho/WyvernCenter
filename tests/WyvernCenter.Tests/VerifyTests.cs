@@ -19,6 +19,7 @@ public class VerifyTests : IDisposable
         fw.Ram[0xD3] = 0x82;          // backlight level 2
         fw.Ram[0x98] = 0x02;          // Cooler Boost off
         fw.Ram[0xD7] = 0x80 | 100;    // charge to 100 %
+        fw.Ram[0xD4] = 0x0D;          // fan mode auto
         var wmi2 = Wmi2Ec.Detect(fw)!;
         var ec = new EcController(ProfileCatalog.GenericFor(FirmwareInterface.Wmi2), new EcAccess(new FakeScm(), wmi2),
             new SnapshotStore(Path.Combine(_dir, "s.json")), new WriteLog(Path.Combine(_dir, "l.txt")), canWrite: false, canTest);
@@ -35,7 +36,7 @@ public class VerifyTests : IDisposable
         Assert.Equal("sensors", plan[0].Id);
         Assert.True(plan.TakeWhile(s => s.Kind is not (StepKind.Change or StepKind.Measure)).Count() > 1);
         Assert.All(plan.SkipWhile(s => s.Kind is not (StepKind.Change or StepKind.Measure)), s => Assert.True(s.Kind is StepKind.Change or StepKind.Measure));
-        Assert.Equal(new[] { "kbdChange", "modeMeasure", "boostChange", "chargeChange" },
+        Assert.Equal(new[] { "kbdChange", "modeMeasure", "fanCurveCheck", "boostChange", "chargeChange" },
             plan.Where(s => s.Kind is StepKind.Change or StepKind.Measure).Select(s => s.Id));
 
         var gf63 = new EcController(ProfileCatalog.Match("16R5EMS1.102"), new EcAccess(new FakeScm()),
@@ -43,6 +44,8 @@ public class VerifyTests : IDisposable
         var gPlan = VerifyPlan.For(gf63, maxCoolingAvailable: true);
         Assert.Contains(gPlan, s => s.Setting == VerifyPlan.MaxCooling);
         Assert.DoesNotContain(gPlan, s => s.Setting is "coolerBoost" or "chargeLimit"); // not on the GF63 any more
+        Assert.DoesNotContain(gPlan, s => s.Setting == VerifyPlan.FanCurve);           // its fan mode is already known
+        Assert.DoesNotContain(gPlan, s => s.Id == "modeKey");
     }
 
     [Fact]
@@ -104,7 +107,7 @@ public class VerifyTests : IDisposable
         wmi2.WritesEnabled = true;
         ec.BeginTest();
         Assert.False(ec.Set("shiftMode", 0xC4).Ok);                // normal writes stay off on WMI v2
-        Assert.False(ec.TestSet("fanMode", 0x1D).Ok);              // not marked testable
+        Assert.False(ec.TestSet("cpuCurveTemp0", 60).Ok);          // not marked testable
         Assert.False(ec.TestSet("shiftMode", 0x55).Ok);            // outside the allowed values
         Assert.Equal(0xC1, fw.Ram[0xD2]);
     }

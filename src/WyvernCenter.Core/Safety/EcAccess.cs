@@ -37,7 +37,8 @@ public sealed class EcAccess : IEcAccess
         switch (s.Route)
         {
             case Route.Scm: _scm.Write(s.Class!.Value, s.Index!.Value, raw); break;
-            case Route.Wmi2 when s.Block is not null: throw new NotSupportedException($"{s.Name}: WMI2 blocks are read-only.");
+            case Route.Wmi2 when s.Block is { Writable: true } b: Wmi2.WriteFanCurvePoint(b.Parameter, b.Byte, checked((byte)raw)); break;
+            case Route.Wmi2 when s.Block is not null: throw new NotSupportedException($"{s.Name}: this WMI2 block is read-only.");
             default: Wmi2.WriteByte(s.EcOffset!.Value, checked((byte)raw)); break;
         }
     }

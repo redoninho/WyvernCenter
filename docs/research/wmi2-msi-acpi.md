@@ -134,6 +134,12 @@ The curve itself is written with MSI's own method, `Set_Fan(1/2)` with `Data[1..
    - If not, put everything back and try 0x8D the same way.
 3. **If neither works**, custom curves stay off on that laptop (modes, Cooler Boost and battery limit are unaffected). The originals are always restored, and the result is stored per EC firmware so the check runs once.
 
+**Built (2026-10-21) as the wizard's "Custom fan curves (measured)" step** (`FanCurveCheck`, `VerifySession.RaiseCurves`):
+
+- Curve points on WMI2 are now `Get_Fan(1|2)` bytes 1–6 (MSI's own read). Writes go through `Wmi2Ec.WriteFanCurvePoint`: read the block, change one point, write MSI's 8-byte payload back with `Set_Fan` (layout checked in MSI's `UserScenario` and `WmiAcpiLib2.Set`). These are the only writable block bytes (`Wmi2Block.Writable`), still through `EcController` (whitelist 0–150, snapshot, read-back).
+- The test curve is each curve's own top point on every point, so no scale is assumed. Order: the CPU fan as it is (6 s), raise both curves + candidate mode, watch 15 s. Faster = +15 % and +300 RPM. Otherwise the mode goes back, the fans settle for 10 s, and the next candidate runs. The encoding already in 0xD4 goes first, else 0x4D.
+- Fan mode goes back first, then the curves; closing the wizard does the same. The report gets the before/peak RPM per candidate.
+
 ## 7. MSI's service bridge removed (2026-10-17)
 
 Wyvern used to reach Cooler Boost, the charge limit and Fn/Win on the GF63 through MSI Foundation Service's named pipe `MSI_SERVICE_2`, with MSI's 3DES key recipe. That route is gone:

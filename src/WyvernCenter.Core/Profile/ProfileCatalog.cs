@@ -73,8 +73,8 @@ public static class ProfileCatalog
                 ? new Wmi2Block(Enum.Parse<Wmi2Method>(b.GetProperty("method").GetString()!, ignoreCase: true),
                     (byte)Num(b.GetProperty("parameter")), Num(b.GetProperty("byte")))
                 : null;
-            if (block is not null && !(e.TryGetProperty("readOnly", out var bro) && bro.GetBoolean()))
-                throw new InvalidDataException($"{p.Name}: WMI2 block settings must be read-only.");
+            if (block is { Writable: false } && !(e.TryGetProperty("readOnly", out var bro) && bro.GetBoolean()))
+                throw new InvalidDataException($"{p.Name}: WMI2 block settings other than fan-curve points must be read-only.");
             settings[p.Name] = new SettingDef(
                 p.Name,
                 route,

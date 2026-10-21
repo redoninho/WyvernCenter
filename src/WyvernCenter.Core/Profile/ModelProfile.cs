@@ -13,7 +13,14 @@ public enum Route { Scm, Wmi2 }
 public enum FirmwareInterface { Scm, Wmi2 }
 
 /// <summary>A byte of a typed WMI v2 Get_* block (e.g. Get_Fan(0) byte 1 = CPU tachometer low byte).</summary>
-public sealed record Wmi2Block(Wmi2Method Method, byte Parameter, int Byte);
+public sealed record Wmi2Block(Wmi2Method Method, byte Parameter, int Byte)
+{
+    /// <summary>
+    /// A fan-curve point: Get_Fan(1) CPU / Get_Fan(2) GPU, bytes 1-6. The only block bytes that may be written, with
+    /// Set_Fan, MSI's own method for curves (it hides the EC address). Every other block is read-only.
+    /// </summary>
+    public bool Writable => Method == Wmi2Method.GetFan && Parameter is 1 or 2 && Byte is >= 1 and <= 6;
+}
 
 /// <summary>
 /// One hardware setting. <see cref="Testable"/>: the "Verify my laptop" wizard may change it briefly (and put it

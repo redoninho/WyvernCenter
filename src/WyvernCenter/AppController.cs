@@ -958,6 +958,28 @@ public sealed class AppController : ApplicationContext
         Post(() => { done(ok, note); Notify(); });
     });
 
+    /// <summary>Runs one fan-curve check operation (see <see cref="VerifySession"/>) on the hardware queue.</summary>
+    public void VerifyRun(Func<VerifySession, (bool Ok, string Note)> op, Action<bool, string> done) => hw.Enqueue(() =>
+    {
+        var (ok, note) = verify is null ? (false, "not started") : op(verify);
+        RefreshCacheNow();
+        Post(() => { done(ok, note); Notify(); });
+    });
+
+    /// <summary>The CPU fan's speed (the GPU fan's when the CPU one can't be read), for the fan-curve check.</summary>
+    public void VerifyFanRpm(Action<int?> done) => hw.Enqueue(() =>
+    {
+        var rpm = FanRpm.FromTach(Ec.TryGet("cpuFanTachLo"), Ec.TryGet("cpuFanTachHi"))
+                  ?? FanRpm.FromTach(Ec.TryGet("gpuFanTachLo"), Ec.TryGet("gpuFanTachHi"));
+        Post(() => done(rpm));
+    });
+
+    public void VerifyRead(string setting, Action<int?> done) => hw.Enqueue(() =>
+    {
+        var v = Ec.TryGet(setting);
+        Post(() => done(v));
+    });
+
     /// <summary>The MSI level names for a measure step: the level now and the one it will try.</summary>
     public void VerifyLevelNames(VerifyStep step, Action<string, string> done) => hw.Enqueue(() =>
     {

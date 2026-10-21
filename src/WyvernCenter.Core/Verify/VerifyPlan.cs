@@ -25,6 +25,12 @@ public sealed record VerifyResult(string Id, string Title, StepAnswer Answer, st
 public static class VerifyPlan
 {
     public const string MaxCooling = "maxCooling";
+    /// <summary>The fan-curve check step (WMI v2): fan mode plus both curves, measured by fan speed.</summary>
+    public const string FanCurve = "fanCurve";
+
+    public const int CurvePointCount = 6;
+    public static readonly IReadOnlyList<string> CurvePoints =
+        new[] { "cpu", "gpu" }.SelectMany(side => Enumerable.Range(0, CurvePointCount).Select(i => $"{side}CurveSpeed{i}")).ToList();
     /// <summary>Where testers send their report (shown at the end of the wizard).</summary>
     public const string ReportEmail = "info@noptic.net";
 
@@ -72,6 +78,12 @@ public static class VerifyPlan
                 $"current level, then {ModeMeasurement.PhaseSeconds} s in another, compares power and clock, and puts your level back. " +
                 "The fans may get louder.",
                 "Nothing to judge: Wyvern measures it. Click Run it.", "shiftMode"));
+        if (Testable("fanMode") && CurvePoints.All(Testable))
+            steps.Add(new("fanCurveCheck", StepKind.Measure, "Custom fan curves (measured)",
+                "Wyvern raises both fan curves to their own top speed and tries the setting that switches custom curves on " +
+                "(MSI Center's way first, then the other), watching whether the fans speed up. Then it puts your fans back. " +
+                "Best when the laptop is cool and quiet. Up to a minute; the fans get loud.",
+                "Nothing to judge: Wyvern measures it. Click Run it.", FanCurve));
         if (Testable("coolerBoost"))
             steps.Add(new("boostChange", StepKind.Change, "Cooler Boost (test)",
                 "Wyvern will turn Cooler Boost on for a few seconds, then off again. The fans get loud.",

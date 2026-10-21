@@ -12,7 +12,7 @@ public sealed class MainForm : Form
     private readonly AppController app;
     private readonly Dictionary<string, RButton> profileButtons = new();
     private readonly string[] profileIds;
-    private readonly Label lblProfile, lblProfileRight, lblCardCpu, lblLive, lblCooling, lblCoolingRight, lblBattery, lblBatteryRight;
+    private readonly Label lblProfile, lblProfileRight, lblCardCpu, lblCooling, lblCoolingRight, lblBattery, lblBatteryRight;
     private readonly Label lblChargeOffIcon, lblChargeOff;
     private readonly Label lblScreen, lblKeyboard, lblStatus;
     private readonly RButton btnCoolerBoost, btnEdit, btnOverlay;
@@ -98,14 +98,10 @@ public sealed class MainForm : Form
         btnEdit = edit!;
         btnNew = add;
 
-        // What the profile in use does (CPU and GPU caps), and live CPU readings.
+        // What the profile in use does (CPU and GPU caps). Live CPU readings are in the Monitor window.
         lblCardCpu = L.Text("", Theme.ForeMain, 9f, 19);
-        lblLive = L.Text("", Theme.ForeDim, 9f, 19);
-        foreach (var l in new[] { lblCardCpu, lblLive })
-        {
-            l.UseMnemonic = false;
-            l.AutoEllipsis = true;
-        }
+        lblCardCpu.UseMnemonic = false;
+        lblCardCpu.AutoEllipsis = true;
         L.Space(4);
 
         // ---- Cooling ---------------------------------------------------------------------------------
@@ -260,12 +256,6 @@ public sealed class MainForm : Form
     {
         if (IsDisposed || app.LastSample is not { } s) return;
         ShowSensors(app.LastSensors);
-        var parts = new List<string>();
-        if (s.CpuW is double w) parts.Add($"CPU {w:F0} W");
-        if (s.CpuMhz is double mhz) parts.Add($"{mhz / 1000:F2} GHz");
-        if (s.CpuLoad is double load) parts.Add($"{load:F0}% load");
-        if (s.RamUsedGb is double ram) parts.Add($"RAM {ram:F1} GB");
-        lblLive.Text = parts.Count > 0 ? "Now: " + string.Join("  ·  ", parts) : "";
         if (s.BatteryPct is int pct)
             lblBatteryRight.Text = s.BatteryW is double bw && Math.Abs(bw) >= 0.05
                 ? $"{pct}% · {(bw > 0 ? "charging" : "draining")} {Math.Abs(bw):F1} W"

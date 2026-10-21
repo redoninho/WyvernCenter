@@ -67,6 +67,25 @@ public sealed class Wmi2Ec
         if (!reply.Ok) throw new InvalidOperationException($"Set_Data(0x{ecOffset:X2}) refused (flag {reply.Flag})");
     }
 
+    /// <summary>Set_Fan's payload length in MSI's own table: Get_Fan(1/2)'s first 8 payload bytes (curve points at 1-6).</summary>
+    public const int FanBlockLength = 8;
+
+    /// <summary>
+    /// Changes one point of a fan curve the way MSI Center does: read Get_Fan(fan), replace the point, write the
+    /// block back with Set_Fan(fan). <paramref name="fan"/> 1 = CPU, 2 = GPU; <paramref name="index"/> 1-6.
+    /// </summary>
+    public void WriteFanCurvePoint(byte fan, int index, byte value)
+    {
+        if (!WritesEnabled) throw new NotSupportedException("WMI v2 writes are only allowed during \"Verify my laptop\" (read-only beta).");
+        if (fan is not (1 or 2) || index is < 1 or > 6) throw new ArgumentOutOfRangeException(nameof(index), $"Get_Fan({fan}) byte {index} isn't a curve point.");
+        var block = ReadBlock(Wmi2Method.GetFan, fan);
+        if (block.Length < FanBlockLength) throw new InvalidDataException($"Get_Fan({fan}) returned {block.Length} bytes");
+        var data = block[..FanBlockLength];
+        data[index] = value;
+        var reply = Wmi2Protocol.Parse(_transport.Call(Wmi2Method.SetFan, Wmi2Protocol.Input(fan, data)));
+        if (!reply.Ok) throw new InvalidOperationException($"Set_Fan({fan}) refused (flag {reply.Flag})");
+    }
+
     /// <summary>The payload of a typed Get_* call (e.g. Get_Fan(0) = tachometers).</summary>
     public byte[] ReadBlock(Wmi2Method method, byte parameter)
     {
