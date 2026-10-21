@@ -27,6 +27,10 @@ public sealed class VerifyForm : Form
     private ModeMeasurement? measure;
     private string levelNow = "your level", levelTest = "the other level";
     private bool measured, viewing;
+    // Fan tests (Max Cooling, Cooler Boost): the fan readings from just before the change, for the report.
+    private string fansBefore = "";
+
+    private static bool FanStep(VerifyStep s) => s.Setting is VerifyPlan.MaxCooling or "coolerBoost";
 
     private VerifyStep Current => steps[index];
 
@@ -122,6 +126,7 @@ public sealed class VerifyForm : Form
         applyNote = "";
         measure = null;
         measured = false;
+        fansBefore = "";
         lblLive.ForeColor = Theme.Accent;
         if (index >= steps.Count) { ShowDone(); return; }
         if (Current.Kind is StepKind.Change or StepKind.Measure && !consented) { ShowConsent(); return; }
@@ -218,6 +223,7 @@ public sealed class VerifyForm : Form
             case Page.Step when Current.Kind == StepKind.Change && !applied:
                 btnPrimary.Enabled = btnSkip.Enabled = false;
                 lblLive.Text = "Changing it…";
+                if (FanStep(Current)) app.VerifySensors(text => fansBefore = text.Replace("\n", " / ")); // queued before the change
                 app.VerifyApply(Current, (ok, note) =>
                 {
                     if (IsDisposed) return;
@@ -270,7 +276,8 @@ public sealed class VerifyForm : Form
             app.VerifyRevert(step, (ok, note) =>
             {
                 if (IsDisposed) return;
-                Record(step, answer, $"{applyNote}; {note}" + (ok ? "" : " (NOT put back)"));
+                var fans = FanStep(step) ? $"fans before: {(fansBefore == "" ? "no reading" : fansBefore)}, during: {(seen.Count == 0 ? "no reading" : seen[^1])}; " : "";
+                Record(step, answer, $"{applyNote}; {fans}{note}" + (ok ? "" : " (NOT put back)"));
                 lblLive.ForeColor = Theme.Accent;
                 Next();
             });
@@ -385,13 +392,13 @@ public sealed class VerifyForm : Form
         var step = Current;
         if (step.Kind == StepKind.Measure || step.Kind == StepKind.Change && !applied) return;
         polling = true;
-        if (step.Setting is null || step.Setting == VerifyPlan.MaxCooling)
+        if (step.Setting is null || FanStep(step))
             app.VerifySensors(text =>
             {
                 polling = false;
                 if (IsDisposed || page != Page.Step || Current != step) return;
-                if (step.Kind == StepKind.Readings) { lblLive.Text = text; Seen(text.Replace("\n", " / ")); }
-                else lblLive.Text = "Changed. " + text.Replace("\n", " · ");
+                Seen(text.Replace("\n", " / "));
+                lblLive.Text = step.Kind == StepKind.Readings ? text : "Changed. " + text.Replace("\n", " · ");
             });
         else
             app.VerifyTrack(step.Setting, (text, changes) =>

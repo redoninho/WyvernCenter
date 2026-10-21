@@ -45,7 +45,8 @@ public static class VerifyPlan
         var steps = new List<VerifyStep>
         {
             new("sensors", StepKind.Readings, "Temperatures and fans",
-                "These are the temperatures and fan speeds Wyvern Center reads from the laptop.",
+                "These are the temperatures and fan speeds Wyvern Center reads from the laptop. The GPU shows – while it's " +
+                "asleep, which is normal on laptops that switch between graphics chips.",
                 "Do they look right? Temperatures roughly 30–100 °C, and the fans speed up when the laptop is busy.", null),
         };
         bool Readable(string s) => ec.IsReadable(s);

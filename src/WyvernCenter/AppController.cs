@@ -20,7 +20,7 @@ public readonly record struct Sensors(int? CpuTemp, int? CpuFan, int? GpuTemp, i
 /// </summary>
 public sealed class AppController : ApplicationContext
 {
-    public const string Version = "0.5.0";
+    public const string Version = "0.5.1";
 
     public AppSettings Settings { get; }
     public EcController Ec { get; }
@@ -1264,11 +1264,11 @@ public sealed class AppController : ApplicationContext
 
     private string WriteSupportReport()
     {
-        string Wmi(string cls, string prop)
+        string Wmi(string cls, string prop, string where = "")
         {
             try
             {
-                using var s = new System.Management.ManagementObjectSearcher($"SELECT {prop} FROM {cls}");
+                using var s = new System.Management.ManagementObjectSearcher($"SELECT {prop} FROM {cls}{where}");
                 return string.Join(" + ", s.Get().Cast<System.Management.ManagementBaseObject>().Select(o => { using (o) return (o[prop]?.ToString() ?? "").Trim(); }).Where(v => v != ""));
             }
             catch { return "?"; }
@@ -1309,7 +1309,8 @@ public sealed class AppController : ApplicationContext
         }
         var report = new SupportReport.Info(Version, Wmi("Win32_ComputerSystem", "Manufacturer"), model, Wmi("Win32_ComputerSystem", "SystemFamily"),
             Wmi("Win32_BaseBoard", "Product"), Wmi("Win32_BIOS", "SMBIOSBIOSVersion"), Wmi("Win32_Processor", "Name"),
-            Wmi("Win32_VideoController", "Name").Split(" + "), FirmwareId, Support, Ec.Profile?.Name, scm, services, dsdtFile,
+            // Real GPUs only: virtual display adapters (remote-desktop and second-screen apps) would list the user's software.
+            Wmi("Win32_VideoController", "Name", " WHERE PNPDeviceID LIKE 'PCI%'").Split(" + "), FirmwareId, Support, Ec.Profile?.Name, scm, services, dsdtFile,
             wmi2 is null ? null : Wmi2Dump.Read(wmi2),
             File.Exists(VerifyFile) ? File.ReadAllText(VerifyFile) : null);
         File.WriteAllText(Path.Combine(folder, "report.md"), SupportReport.Build(report));
