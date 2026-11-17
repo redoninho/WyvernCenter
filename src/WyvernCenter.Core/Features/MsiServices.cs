@@ -80,4 +80,35 @@ public sealed class WindowsServiceControl : IServiceControl
             return null; // not installed
         }
     }
+
+    /// <summary>sc.exe arguments as separate tokens; names with quotes or control characters are refused.</summary>
+    public static string[] ScArguments(string name, ServiceStartMode mode)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Any(ch => ch == '"' || char.IsControl(ch)))
+            throw new ArgumentException($"Refusing unsafe service name '{name}'.", nameof(name));
+        var start = mode switch
+        {
+            ServiceStartMode.Automatic => "auto",
+            ServiceStartMode.Manual => "demand",
+            ServiceStartMode.Disabled => "disabled",
+            _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+        };
+        return new[] { "config", name, "start=", start };
+    }
+
+    /// <summary>Changes a service's startup type with %SystemRoot%\System32\sc.exe (full path, no shell).</summary>
+    public static void SetStartMode(string name, ServiceStartMode mode)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "sc.exe"))
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+        };
+        foreach (var a in ScArguments(name, mode)) psi.ArgumentList.Add(a);
+        using var p = System.Diagnostics.Process.Start(psi)!;
+        var output = p.StandardOutput.ReadToEnd();
+        p.WaitForExit(10000);
+        if (p.ExitCode != 0) throw new InvalidOperationException($"sc config failed ({p.ExitCode}): {output.Trim()}");
+    }
 }

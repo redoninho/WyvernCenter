@@ -330,12 +330,20 @@ public sealed class MainForm : Form
         var chargeOn = ec.IsAvailable("chargeLimit");
         lblBattery.Text = charge is int c ? $"Battery Charge Limit: {c}%" : "Battery Charge Limit";
         lblChargeOffIcon.Visible = lblChargeOff.Visible = !chargeOn;
-        lblChargeOff.Text = app.Interface == FirmwareInterface.Wmi2 ? "Read-only (beta)" : "Disabled: MSI security issue (hover for details)";
-        var chargeWhy = chargeOn ? "Stop charging at this level to slow battery wear"
+        lblChargeOff.Text = app.Interface == FirmwareInterface.Wmi2 ? "Read-only (beta)"
+            : !app.MsiServiceSwitchShown ? "Not available"
+            : !app.MsiServiceInstalled ? "Needs MSI's Dragon Center service (hover)"
+            : "Off: turn on in Settings → This laptop (hover)";
+        var chargeWhy = chargeOn ? "Stop charging at this level to slow battery wear. Set through MSI's Dragon Center service, " +
+                "which Wyvern starts for the change and stops again a few seconds later."
             : app.Interface == FirmwareInterface.Wmi2 ? "Read-only on newer MSI laptops in this version (beta)."
-            : "Disabled. On this laptop the charge limit can only be set through MSI's background service, which has a " +
-              "critical security hole (CVE-2026-37452: any program can use it to take full control of Windows). " +
-              "It stays off until MSI fixes that service.";
+            : !app.MsiServiceSwitchShown ? "Needs Wyvern Center running as administrator on an MSI laptop."
+            : !app.MsiServiceInstalled
+                ? "On this laptop the firmware doesn't expose the charge limit, so it's set through MSI's own Dragon Center " +
+                  "service (MSI Foundation Service). Install Dragon Center for this model, then turn on \"Use MSI's Dragon Center " +
+                  "service\" in Settings → This laptop."
+                : "On this laptop the firmware doesn't expose the charge limit, so it's set through MSI's own Dragon Center " +
+                  "service. Turn on \"Use MSI's Dragon Center service\" in Settings → This laptop.";
         foreach (var ctl in chargeButtons.Cast<Control>().Append(sliderCharge).Append(lblBattery).Append(lblChargeOff).Append(lblChargeOffIcon))
             tips.SetToolTip(ctl, TextWrap.Lines(chargeWhy));
         for (var i = 0; i < ChargePresets.Length; i++)

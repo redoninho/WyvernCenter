@@ -1,0 +1,348 @@
+{
+  "name": "MSI GS66 Stealth 10S",
+  "firmware": [
+    "16V1EMS1.111"
+  ],
+  "msiServices": [
+    "Micro Star SCM",
+    "MSI Foundation Service",
+    "MSI Sendevsvc",
+    "MSI_Central_Service",
+    "MSI_Companion_Service"
+  ],
+  "curve": {
+    "minSpeed": 0,
+    "maxSpeed": 150,
+    "floorAtIndex": 5,
+    "floorSpeed": 100
+  },
+  "settings": {
+    "shiftMode": {
+      "route": "scm",
+      "class": "System",
+      "index": 7,
+      "mask": "0xFF",
+      "values": {
+        "comfort": "0xC1",
+        "eco": "0xC2",
+        "turbo": "0xC4"
+      },
+      "verified": true,
+      "note": "EC 0xF2 (DSDT SCM0 map identical to the GF63's; msi-ec CONF_G1_3 lists 16V1EMS1). Reads 0x80 when no MSI software has ever set a mode since the EC powered up (seen on a tester's 10SE without MSI apps), so 0x80 is accepted as a starting value and is what Restore puts back.",
+      "expect": {
+        "mask": "0xFF",
+        "values": [
+          "0x80",
+          "0xC0",
+          "0xC1",
+          "0xC2",
+          "0xC3",
+          "0xC4"
+        ]
+      },
+      "testable": true
+    },
+    "fanMode": {
+      "route": "scm",
+      "class": "System",
+      "index": 9,
+      "mask": "0xFF",
+      "values": {
+        "auto": "0x0D",
+        "silent": "0x1D",
+        "advanced": "0x8D"
+      },
+      "verified": true,
+      "note": "EC 0xF4: auto 0x0D, silent 0x1D, advanced 0x8D (msi-ec CONF_G1_3, same as the GF63). Written only if the current byte's low nibble is 0xD.",
+      "expect": {
+        "mask": "0x0F",
+        "values": [
+          "0x0D"
+        ]
+      }
+    },
+    "cpuFanTachLo": {
+      "route": "scm",
+      "class": "Ap",
+      "index": 2,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuFanTachHi": {
+      "route": "scm",
+      "class": "Ap",
+      "index": 3,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuFanTachLo": {
+      "route": "scm",
+      "class": "Ap",
+      "index": 4,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuFanTachHi": {
+      "route": "scm",
+      "class": "Ap",
+      "index": 5,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuTemp": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 1,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuFan": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 2,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuTemp": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 1,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuFan": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 2,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveTemp0": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 4,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed0": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 11,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "cpuCurveTemp1": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 5,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed1": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 12,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "cpuCurveTemp2": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 6,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed2": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 13,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "cpuCurveTemp3": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 7,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed3": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 14,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "cpuCurveTemp4": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 8,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed4": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 15,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "cpuCurveTemp5": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 9,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "cpuCurveSpeed5": {
+      "route": "scm",
+      "class": "Cpu",
+      "index": 16,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "gpuCurveTemp0": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 4,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed0": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 11,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "gpuCurveTemp1": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 5,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed1": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 12,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "gpuCurveTemp2": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 6,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed2": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 13,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "gpuCurveTemp3": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 7,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed3": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 14,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "gpuCurveTemp4": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 8,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed4": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 15,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "gpuCurveTemp5": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 9,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true
+    },
+    "gpuCurveSpeed5": {
+      "route": "scm",
+      "class": "Vga",
+      "index": 16,
+      "mask": "0xFF",
+      "verified": true,
+      "readOnly": true,
+      "note": "Read-only: this model's curve tops out at 0x64 (100), not the GF63's 150, so the speed scale is unconfirmed."
+    },
+    "chargeLimit": {
+      "route": "bridge",
+      "offset": "0xEF",
+      "mask": "0x7F",
+      "min": 50,
+      "max": 100,
+      "verified": true,
+      "note": "EC 0xEF through MSI's Dragon Center service (only when switched on in Settings): bit 7 kept + percent (msi-ec CONF_G1_3; same encoding as the GF63). Written only if bit 7 is set.",
+      "expect": {
+        "mask": "0x80",
+        "values": [
+          "0x80"
+        ]
+      }
+    }
+  }
+}

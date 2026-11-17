@@ -23,6 +23,10 @@ public sealed class AppSettings
     public bool RefreshAuto { get; set; }
     /// <summary>The EC firmware the user allowed experimental changes on (unconfirmed model); bound to that firmware.</summary>
     public string? ExperimentalFirmware { get; set; }
+    /// <summary>Battery charge limit through MSI's Dragon Center service (WMI v1 laptops): started only for the change.</summary>
+    public bool UseMsiService { get; set; }
+    /// <summary>The charge limit the user last set (put back at start-up if the laptop lost it, e.g. after a full power-off).</summary>
+    public int? ChargeLimit { get; set; }
     /// <summary>The NVIDIA GPU's limits, read once (reading them wakes the GPU). Null until found.</summary>
     public GpuLimits? GpuLimits { get; set; }
     /// <summary>Windows' power mode before Wyvern Center first changed it (Restore puts it back).</summary>

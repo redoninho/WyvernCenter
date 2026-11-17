@@ -32,6 +32,8 @@ public sealed class AppController : ApplicationContext
     /// <summary>The MSI firmware interface found: SCM0 (WMI v1, up to 10th gen) or WMI v2 (11th gen and newer).</summary>
     public FirmwareInterface Interface { get; } = FirmwareInterface.Scm;
     private readonly Wmi2Ec? wmi2;
+    // MSI's Dragon Center service (battery limit on WMI v1 laptops); does nothing until the user switches it on.
+    private readonly WyvernCenter.Core.Bridge.MsiServiceBridge? bridge;
     /// <summary>The user allowed changes on this unconfirmed model (Settings → This laptop).</summary>
     public bool ExperimentalOn { get; }
     private readonly string? systemModel = SystemModel();
@@ -166,7 +168,9 @@ public sealed class AppController : ApplicationContext
                 log.Append(note);
                 if (note.StartsWith("The old", StringComparison.Ordinal)) Post(() => { Status = note; Notify(); });
             });
-        Ec = new EcController(profile, new EcAccess(scm, wmi2), new SnapshotStore(Path.Combine(AppSettings.Dir, "snapshot.json")), log,
+        if (IsAdmin && Interface == FirmwareInterface.Scm)
+            bridge = new WyvernCenter.Core.Bridge.MsiServiceBridge(log.Append) { Enabled = Settings.UseMsiService };
+        Ec = new EcController(profile, new EcAccess(scm, wmi2, bridge), new SnapshotStore(Path.Combine(AppSettings.Dir, "snapshot.json")), log,
             canWrite: IsAdmin && SecureStorage.Ready && Interface == FirmwareInterface.Scm && (Support == ModelSupport.Supported || ExperimentalOn),
             canTest: IsAdmin && SecureStorage.Ready);
         if (Settings.Profiles is null && (Settings.Mode ?? Settings.ModeOnAc ?? Settings.ModeOnBattery) is not null)
@@ -222,7 +226,8 @@ public sealed class AppController : ApplicationContext
         if (Settings.OverlayOn) Post(() => ShowOverlay(true));
         if (HotkeyError is { } hotkeyError) Post(() => tray.ShowBalloonTip(5000, "Wyvern Center", hotkeyError, ToolTipIcon.Info));
         if (Settings.RefreshAuto) ApplyAutoRefresh();
-        RefreshCache();
+        // One short use of MSI's service at start, if switched on: read the charge limit and put it back if it was lost.
+        hw.Enqueue(() => { RefreshCacheNow(includeBridge: Settings.UseMsiService); ReapplyChargeLimit(); Notify(); });
 
         if (!startHidden) ShowMain();
         else trimTimer.Start(); // started for the tray: shrink once start-up is done
@@ -370,11 +375,18 @@ public sealed class AppController : ApplicationContext
     }
 
     /// <summary>Reads UI-visible values on the hardware thread.</summary>
-    public void RefreshCache() => hw.Enqueue(() => { RefreshCacheNow(); Notify(); });
+    /// <param name="includeBridge">Also read settings behind MSI's service even if that starts it (start-up, switch on).</param>
+    public void RefreshCache(bool includeBridge = false) => hw.Enqueue(() => { RefreshCacheNow(includeBridge); Notify(); });
 
-    private void RefreshCacheNow()
+    private void RefreshCacheNow(bool includeBridge = false)
     {
-        foreach (var n in CachedSettings) cache[n] = Ec.TryGet(n);
+        foreach (var n in CachedSettings)
+        {
+            // Reading through MSI's service starts it: only when asked, or while it's already running (e.g. after a change).
+            if (Ec.Profile?.Settings.TryGetValue(n, out var d) == true && d.Route == Route.Bridge
+                && !(includeBridge || Ec.BridgeReady) && cache.ContainsKey(n)) continue;
+            cache[n] = Ec.TryGet(n);
+        }
         MsiApps = MsiServices.Installed(serviceControl, MsiServices.Known);
         CanRestore = Ec.CanRestore;
     }
@@ -873,7 +885,25 @@ public sealed class AppController : ApplicationContext
 
     // ---- Single settings ----------------------------------------------------------------
 
-    public void SetSetting(string name, int value, string label) => RunHw(label, () => new[] { Ec.Set(name, value) });
+    public void SetSetting(string name, int value, string label) => RunHw(label, () =>
+    {
+        var r = Ec.Set(name, value);
+        if (name == "chargeLimit" && r.Ok) Post(() => { Settings.ChargeLimit = value; Settings.Save(); });
+        return new[] { r };
+    });
+
+    /// <summary>
+    /// Hardware queue, at start-up: if the laptop's charge limit no longer matches the one the user set (the EC can lose
+    /// it on a full power-off), set it again. Only with MSI's service switched on; one short service start.
+    /// </summary>
+    private void ReapplyChargeLimit()
+    {
+        if (!Settings.UseMsiService || Settings.ChargeLimit is not int want || !Ec.IsAvailable("chargeLimit")) return;
+        if (Ec.TryGet("chargeLimit") is not int now || now == want) return;
+        var r = Ec.Set("chargeLimit", want);
+        log.Append($"start-up: charge limit was {now}%, set back to {want}%: {r.Message}");
+        cache["chargeLimit"] = Ec.TryGet("chargeLimit");
+    }
 
     // ---- Max Cooling (Wyvern's Cooler Boost) -------------------------------------------------
 
@@ -1096,6 +1126,7 @@ public sealed class AppController : ApplicationContext
     {
         Store.ActiveId = null; // back to "nothing picked": Wyvern Center writes nothing until a profile is chosen again
         applied = null;
+        Settings.ChargeLimit = null; // the original limit comes back and stays (not re-applied at start-up)
         var powerMode = Settings.OriginalPowerMode;
         SaveProfiles();
         RunHw("Restore originals", () =>
@@ -1253,6 +1284,26 @@ public sealed class AppController : ApplicationContext
     }
 
     /// <summary>Allows (or stops) changes on this unconfirmed model, for this firmware only; applies after a restart.</summary>
+    /// <summary>Whether the "Use MSI's Dragon Center service" switch applies here (WMI v1 laptop, admin).</summary>
+    public bool MsiServiceSwitchShown => bridge is not null;
+    /// <summary>MSI's service (MSI Foundation Service) is installed.</summary>
+    public bool MsiServiceInstalled => bridge?.Installed ?? false;
+
+    /// <summary>Switches the battery-limit route through MSI's Dragon Center service on or off (live).</summary>
+    public void SetUseMsiService(bool on)
+    {
+        Settings.UseMsiService = on;
+        Settings.Save();
+        if (bridge is null) return;
+        bridge.Enabled = on;
+        if (on) RefreshCache(includeBridge: true);
+        else
+        {
+            cache.TryRemove("chargeLimit", out _);
+            Notify();
+        }
+    }
+
     public void SetExperimental(bool on)
     {
         // Opting out: put the originals back now, while changes are still allowed; afterwards the app is read-only and
@@ -1464,6 +1515,7 @@ public sealed class AppController : ApplicationContext
         monitorTimer.Stop();
         tray.Visible = false;
         hw.WaitIdle(TimeSpan.FromSeconds(15)); // never leave a half-written curve behind
+        bridge?.Dispose(); // stops MSI's service if we started it, and sets it back to Disabled if it was
         hw.Dispose();
         tray.Dispose();
         cpuCounters.Dispose();

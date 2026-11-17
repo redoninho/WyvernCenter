@@ -166,6 +166,23 @@ public sealed class SettingsForm : Form
                 app.SetExperimental(chkExperimental.Checked);
             };
         }
+        if (app.MsiServiceSwitchShown)
+        {
+            var chkMsi = L.Add(new CheckBox
+            {
+                Text = "Use MSI's Dragon Center service (battery charge limit)",
+                ForeColor = Theme.ForeMain,
+                Checked = app.Settings.UseMsiService,
+                Enabled = SecureStorage.Ready,
+            }, 28);
+            L.Tips.SetToolTip(chkMsi, TextWrap.Lines(
+                "This laptop's firmware doesn't expose the battery charge limit, so Wyvern sets it through MSI's own Dragon Center " +
+                "service (MSI Foundation Service), the way Dragon Center does. Wyvern starts the service only for the change and " +
+                "stops it again about 10 seconds later; if you had it Disabled, it goes back to Disabled. Note: while it runs, " +
+                "that MSI service has a known security hole (CVE-2026-37452/-37453), so it's kept off the rest of the time." +
+                (app.MsiServiceInstalled ? "" : "\n\nMSI Foundation Service isn't installed: install Dragon Center for this model first.")));
+            chkMsi.CheckedChanged += (_, _) => { if (!syncing) app.SetUseMsiService(chkMsi.Checked); };
+        }
         var btnVerify = L.Add(new RButton { Text = "Verify my laptop…", BorderColor = Theme.Accent, Enabled = app.CanVerify }, 30);
         L.Tips.SetToolTip(btnVerify, TextWrap.Lines(app.CanVerify
             ? "A few minutes of guided checks: Wyvern shows what it reads, you press a few keys, and it tries each setting briefly (always putting it back). Your answers go into the support report."

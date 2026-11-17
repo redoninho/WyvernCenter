@@ -72,9 +72,10 @@ Other MSI laptops start in **read-only mode**: temperatures and fans are shown, 
 
 - **Allow changes (experimental):**
   - Same board, different firmware version: uses that model's profile.
-  - Any other MSI laptop: uses the generic profile. It covers only performance mode, fan mode and keyboard backlight,
-    using MSI's standard encoding. Before each write it checks that the current value looks like that setting, and
-    refuses if not. It never changes fan curves, battery limit or Cooler Boost, because those differ between models.
+  - Any other MSI laptop: uses the generic profile. It covers performance mode, fan mode, keyboard backlight and (with
+    MSI's Dragon Center service switched on) the battery limit, using MSI's standard encoding. Before each write it checks
+    that the current value looks like that setting, and refuses if not. It never changes fan curves, because their scale
+    differs between models.
 
     Turning experimental mode off restores the original values first.
 - **Create support report:** saves your laptop's firmware details (`report.md` and `dsdt.aml` in
@@ -105,6 +106,7 @@ active; hover it to see which ones to set to Disabled. Wyvern Center never chang
 |---|---|
 | Fans, performance mode, keyboard, sensors | The firmware's `SCM0` WMI data blocks (`MSI_System`, `MSI_CPU`, …), which map one-to-one onto EC registers. Read through MSI's `root\WMI` classes, or by firmware GUID when those aren't installed. No driver and no MSI software needed. |
 | Newer laptops (11th gen and later) | The firmware's WMI v2 interface (`MSI_ACPI`), called by GUID. Read-only for now. |
+| Battery charge limit (10th gen and older) | Not exposed by the firmware, so it goes through MSI's own Dragon Center service (`MSI Foundation Service`), the way Dragon Center sets it. Opt-in (Settings → This laptop), off by default. Wyvern starts the service only for the change, stops it about 10 s later and sets it back to Disabled if it was. Wyvern remembers the limit and puts it back at start-up if the laptop lost it. Note that this MSI service has known security issues (CVE-2026-37452/-37453/-37454) while it runs. |
 | Max Cooling | Wyvern's Cooler Boost: both fan curves to full speed through the firmware, put back when turned off. |
 | CPU clock and turbo | Windows power plan settings (`PROCFREQMAX`, `PERFBOOSTMODE`, …) and the Windows power mode. |
 | GPU clock cap and power limit | NVIDIA NVML clock locks. The power limit is a software limiter that steps the clock cap. |

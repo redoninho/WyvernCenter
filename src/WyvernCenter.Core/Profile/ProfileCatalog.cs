@@ -67,6 +67,7 @@ public static class ProfileCatalog
             {
                 "scm" => Route.Scm,
                 "wmi2" => Route.Wmi2,
+                "bridge" => Route.Bridge,
                 var other => throw new InvalidDataException($"{p.Name}: unknown route '{other}'"),
             };
             var block = route == Route.Wmi2 && e.TryGetProperty("block", out var b)
@@ -80,7 +81,7 @@ public static class ProfileCatalog
                 route,
                 route == Route.Scm ? Enum.Parse<ScmClass>(e.GetProperty("class").GetString()!, ignoreCase: true) : null,
                 route == Route.Scm ? e.GetProperty("index").GetInt32() : null,
-                route == Route.Wmi2 && block is null ? Num(e.GetProperty("offset")) : null,
+                (route == Route.Wmi2 && block is null) || route == Route.Bridge ? Num(e.GetProperty("offset")) : null,
                 e.TryGetProperty("mask", out var m) ? Num(m) : 0xFF,
                 e.TryGetProperty("values", out var v) ? v.EnumerateObject().ToDictionary(x => x.Name, x => Num(x.Value)) : null,
                 e.TryGetProperty("min", out var mn) ? Num(mn) : null,

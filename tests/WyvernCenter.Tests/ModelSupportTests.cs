@@ -35,7 +35,8 @@ public class ModelSupportTests : IDisposable
         Assert.Equal(ModelSupport.Generic, m.Support);
         var p = m.Profile!;
         Assert.True(p.Generic);
-        Assert.All(p.Settings.Values, s => Assert.Equal(Route.Scm, s.Route));          // firmware only
+        Assert.All(p.Settings.Values.Where(s => s.Name != "chargeLimit"), s => Assert.Equal(Route.Scm, s.Route)); // firmware only
+        Assert.Equal(Route.Bridge, p.Settings["chargeLimit"].Route);                    // MSI's service, when switched on
         Assert.All(p.Settings.Values.Where(s => s.Name.Contains("CurveSpeed")), s => Assert.True(s.ReadOnly)); // fan scale may differ
         Assert.False(p.Settings["shiftMode"].ReadOnly);
         Assert.True(p.Settings.ContainsKey("cpuTemp"));
@@ -118,6 +119,31 @@ public class ModelSupportTests : IDisposable
         var (ok, scm2) = Generic(shift: 0xC1);
         Assert.True(ok.Set("shiftMode", 0xC4).Ok);
         Assert.Equal(0xC4, scm2[ScmClass.System, 7]);
+    }
+
+    [Fact]
+    public void Gs66_10S_IsSupported_WithoutKeyboardOrFanCurveWrites()
+    {
+        var m = ProfileCatalog.Resolve("16V1EMS1.111");
+        Assert.Equal(ModelSupport.Supported, m.Support);
+        var p = m.Profile!;
+        Assert.Equal("MSI GS66 Stealth 10S", p.Name);
+        Assert.False(p.Settings.ContainsKey("kbdBacklight"));                       // per-key RGB, not EC 0xF3
+        Assert.All(p.Settings.Values.Where(s => s.Name.Contains("CurveSpeed")), s => Assert.True(s.ReadOnly));
+    }
+
+    [Fact]
+    public void Gs66_ShiftModeNeverSetByMsiSoftware_CanBeChangedAndRestored()
+    {
+        var scm = new FakeScm();
+        scm[ScmClass.System, 7] = 0x80;                  // tester's 10SE with no MSI apps installed
+        scm[ScmClass.System, 9] = 0x0D;
+        var ec = new EcController(ProfileCatalog.Match("16V1EMS1.111"), new EcAccess(scm),
+            new SnapshotStore(Path.Combine(_dir, "gs.json")), new WriteLog(Path.Combine(_dir, "gs.txt")), canWrite: true);
+        Assert.True(ec.Set("shiftMode", 0xC2).Ok);
+        Assert.Equal(0xC2, scm[ScmClass.System, 7]);
+        Assert.All(ec.RestoreSnapshot(), r => Assert.True(r.Ok, r.Setting + ": " + r.Message));
+        Assert.Equal(0x80, scm[ScmClass.System, 7]);
     }
 
     [Fact]

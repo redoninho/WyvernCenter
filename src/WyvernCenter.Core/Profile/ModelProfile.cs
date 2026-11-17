@@ -5,9 +5,10 @@ namespace WyvernCenter.Core.Profile;
 
 /// <summary>
 /// Where a setting lives: an SCM0 instance (up to 10th gen), or an EC offset / typed block through the WMI v2
-/// firmware interface (11th gen+). Both go straight to the firmware; nothing goes through MSI's software.
+/// firmware interface (11th gen+). Both go straight to the firmware. Bridge = a raw EC offset through MSI's own
+/// Dragon Center service (only when the user switched it on; for bytes the firmware doesn't expose, e.g. 0xEF).
 /// </summary>
-public enum Route { Scm, Wmi2 }
+public enum Route { Scm, Wmi2, Bridge }
 
 /// <summary>Which MSI firmware interface a profile is written for.</summary>
 public enum FirmwareInterface { Scm, Wmi2 }

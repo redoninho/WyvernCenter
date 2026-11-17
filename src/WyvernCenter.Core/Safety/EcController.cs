@@ -25,6 +25,7 @@ public sealed class EcController
     // One lock per route (SCM0 and WMI v2 are separate firmware interfaces).
     private readonly object _scmLock = new();
     private readonly object _wmi2Lock = new();
+    private readonly object _bridgeLock = new();   // MSI's service can be slow to start: never blocks firmware writes
     // The snapshot file and _snapshotted. Never held while reading hardware, so a slow read can't hold up another
     // route's writes (e.g. the thermal failsafe's).
     private readonly object _snapshotLock = new();
@@ -63,7 +64,10 @@ public sealed class EcController
         return _access.IsAvailable(s); // must stay cheap: the UI thread calls this
     }
 
-    private object LockFor(SettingDef s) => s.Route == Route.Wmi2 ? _wmi2Lock : _scmLock;
+    private object LockFor(SettingDef s) => s.Route switch { Route.Wmi2 => _wmi2Lock, Route.Bridge => _bridgeLock, _ => _scmLock };
+
+    /// <summary>MSI's service is running, so bridge settings can be read without starting it.</summary>
+    public bool BridgeReady => _access.BridgeReady;
 
     /// <summary>Whether a setting can be read right now.</summary>
     public bool IsReadable(string name) =>
@@ -217,7 +221,9 @@ public sealed class EcController
         List<SettingDef> due;
         lock (_snapshotLock)
             due = _profile!.Settings.Values
-                .Where(s => (!s.ReadOnly || s.Name == target.Name) && !_snapshotted.Contains(s.Name))
+                // Bridge settings only right before their own first write (reading them starts MSI's service).
+                .Where(s => (!s.ReadOnly || s.Name == target.Name) && !_snapshotted.Contains(s.Name)
+                            && (s.Route != Route.Bridge || s.Name == target.Name))
                 .ToList();
         if (due.Count == 0) return true;
 

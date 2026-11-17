@@ -343,6 +343,21 @@
       "verified": true,
       "readOnly": true,
       "note": "Readable everywhere; not written on unconfirmed models (the fan speed scale differs: 0-150 on some, 0-100 on others)."
+    },
+    "chargeLimit": {
+      "route": "bridge",
+      "offset": "0xEF",
+      "mask": "0x7F",
+      "min": 50,
+      "max": 100,
+      "verified": true,
+      "note": "EC 0xEF through MSI's Dragon Center service (only when switched on in Settings), as on every WMI1 layout in msi-ec. Written only if bit 7 is set (the byte really is the charge limit).",
+      "expect": {
+        "mask": "0x80",
+        "values": [
+          "0x80"
+        ]
+      }
     }
   }
 }

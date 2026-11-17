@@ -334,6 +334,21 @@
       "max": 150,
       "verified": true,
       "note": "Observed MSI Center rewriting indices 12-16 of the curve when switching scenarios."
+    },
+    "chargeLimit": {
+      "route": "bridge",
+      "offset": "0xEF",
+      "mask": "0x7F",
+      "min": 50,
+      "max": 100,
+      "verified": true,
+      "note": "EC 0xEF through MSI's Dragon Center service (only when switched on in Settings): bit 7 kept + percent. Observed 0xD0 (80) -> 0xE4 (100) -> 0xD0 (80) -> 0xBC (60).",
+      "expect": {
+        "mask": "0x80",
+        "values": [
+          "0x80"
+        ]
+      }
     }
   }
 }

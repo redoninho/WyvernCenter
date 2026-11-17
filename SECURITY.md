@@ -18,6 +18,9 @@ Advisories. Include the steps to reproduce and the version.
 
 - The installed copy and its data live in `C:\Program Files\Wyvern Center`, which only administrators can change. The data
   folder is refused if it's a link.
+- The battery limit on 10th-gen and older laptops uses MSI's Dragon Center service, only when the user turns that on. Its
+  pipe accepts any local program while the service runs (CVE-2026-37452/-37453/-37454), so Wyvern runs it for seconds per
+  change, checks the pipe server is really MSI's service before talking to it, and sets it back to Disabled afterwards.
 - The startup task points only at that installed copy, never at a build in a user folder.
 - Native libraries load from System32 (NVML: System32 or NVIDIA's NVSMI folder) by full path, and programs start by
   full path.
