@@ -169,7 +169,8 @@ public sealed class AppController : ApplicationContext
                 if (note.StartsWith("The old", StringComparison.Ordinal)) Post(() => { Status = note; Notify(); });
             });
         if (IsAdmin && Interface == FirmwareInterface.Scm)
-            bridge = new WyvernCenter.Core.Bridge.MsiServiceBridge(log.Append) { Enabled = Settings.UseMsiService };
+            bridge = new WyvernCenter.Core.Bridge.MsiServiceBridge(log.Append,
+                SecureStorage.Ready ? Path.Combine(AppSettings.Dir, "msi-service-revert.txt") : null) { Enabled = Settings.UseMsiService };
         Ec = new EcController(profile, new EcAccess(scm, wmi2, bridge), new SnapshotStore(Path.Combine(AppSettings.Dir, "snapshot.json")), log,
             canWrite: IsAdmin && SecureStorage.Ready && Interface == FirmwareInterface.Scm && (Support == ModelSupport.Supported || ExperimentalOn),
             canTest: IsAdmin && SecureStorage.Ready);

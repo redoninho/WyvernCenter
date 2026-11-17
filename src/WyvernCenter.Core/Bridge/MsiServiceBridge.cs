@@ -23,13 +23,25 @@ public sealed class MsiServiceBridge : IEcBridge, IDisposable
     private readonly System.Threading.Timer _idleTimer;
     private bool _startedByUs;
     private bool _wasDisabled;
+    private readonly string? _revertMarker;
     private bool _handshaken;
     private bool _broken;
 
-    public MsiServiceBridge(Action<string>? log = null)
+    /// <param name="revertMarker">
+    /// A file in an admin-only folder. It exists while the service is enabled because of us, so a crash or power loss
+    /// mid-change is undone at the next start (service stopped, set back to Disabled).
+    /// </param>
+    public MsiServiceBridge(Action<string>? log = null, string? revertMarker = null)
     {
         _log = log;
+        _revertMarker = revertMarker;
         _idleTimer = new System.Threading.Timer(_ => StopIfWeStartedIt(), null, Timeout.Infinite, Timeout.Infinite);
+        if (_revertMarker is not null && File.Exists(_revertMarker))
+        {
+            _log?.Invoke("bridge: last run left MSI Foundation Service enabled; stopping it and setting it back to Disabled");
+            _startedByUs = _wasDisabled = true;
+            StopIfWeStartedIt();
+        }
     }
 
     /// <summary>The user's "Use MSI's Dragon Center service" switch. Off = never touched.</summary>
@@ -227,17 +239,28 @@ public sealed class MsiServiceBridge : IEcBridge, IDisposable
         {
             if (sc.Status == ServiceControllerStatus.StopPending)
                 sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(15));
-            if (sc.StartType == ServiceStartMode.Disabled)
+            try
             {
-                // Disabled by the user (recommended): allowed to start for this operation only, disabled again after.
-                WyvernCenter.Core.Features.WindowsServiceControl.SetStartMode(ServiceName, ServiceStartMode.Manual);
-                _wasDisabled = true;
-                sc.Refresh();
+                if (sc.StartType == ServiceStartMode.Disabled)
+                {
+                    // Disabled by the user (recommended): allowed to start for this operation only, disabled again
+                    // after. Recorded on disk first, so even a crash right now is undone at the next start.
+                    if (_revertMarker is not null) File.WriteAllText(_revertMarker, DateTime.Now.ToString("O"));
+                    _wasDisabled = true;
+                    WyvernCenter.Core.Features.WindowsServiceControl.SetStartMode(ServiceName, ServiceStartMode.Manual);
+                    sc.Refresh();
+                }
+                _startedByUs = true; // before Start: whatever happens next, we own the clean-up
+                sc.Start();
+                sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(20));
             }
-            sc.Start();
+            catch
+            {
+                StopIfWeStartedIt(); // failed start: stop it if it came up anyway, and back to Disabled
+                throw;
+            }
         }
-        sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(20));
-        _startedByUs = true;
+        else sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(20));
         _handshaken = false;
 
         // The service creates its pipe shortly after reporting Running.
@@ -252,22 +275,8 @@ public sealed class MsiServiceBridge : IEcBridge, IDisposable
     {
         lock (_lock)
         {
-            if (!_startedByUs) return;
-            try
-            {
-                using var sc = new ServiceController(ServiceName);
-                // Automatic means MSI owns it again (e.g. after Hand back): never stop it then.
-                if (sc.StartType != ServiceStartMode.Automatic && sc.Status == ServiceControllerStatus.Running)
-                {
-                    sc.Stop();
-                    sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(20));
-                }
-                _log?.Invoke("bridge: stopped MSI Foundation Service (idle)");
-            }
-            catch (Exception ex)
-            {
-                _log?.Invoke("bridge: could not stop MSI Foundation Service: " + ex.Message);
-            }
+            if (!_startedByUs && !_wasDisabled) return;
+            // Disabled first (it can't be started again behind us), then stopped.
             if (_wasDisabled)
             {
                 try
@@ -278,8 +287,33 @@ public sealed class MsiServiceBridge : IEcBridge, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    _log?.Invoke("bridge: could not set MSI Foundation Service back to Disabled: " + ex.Message);
+                    _log?.Invoke("bridge: could not set MSI Foundation Service back to Disabled (retried next start): " + ex.Message);
                 }
+            }
+            if (_startedByUs)
+            {
+                try
+                {
+                    using var sc = new ServiceController(ServiceName);
+                    if (sc.Status == ServiceControllerStatus.StartPending)
+                        sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(20));
+                    // Automatic means the user/MSI set it to start with Windows: never stop it then.
+                    if (sc.StartType != ServiceStartMode.Automatic && sc.Status == ServiceControllerStatus.Running)
+                    {
+                        sc.Stop();
+                        sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(20));
+                    }
+                    _log?.Invoke("bridge: stopped MSI Foundation Service (idle)");
+                }
+                catch (Exception ex)
+                {
+                    _log?.Invoke("bridge: could not stop MSI Foundation Service: " + ex.Message);
+                }
+            }
+            if (!_wasDisabled && _revertMarker is not null)
+            {
+                try { File.Delete(_revertMarker); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             }
             _startedByUs = false;
             _handshaken = false;
