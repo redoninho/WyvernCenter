@@ -20,7 +20,7 @@ public readonly record struct Sensors(int? CpuTemp, int? CpuFan, int? GpuTemp, i
 /// </summary>
 public sealed class AppController : ApplicationContext
 {
-    public const string Version = "0.5.2";
+    public const string Version = "0.5.3";
 
     public AppSettings Settings { get; }
     public EcController Ec { get; }
