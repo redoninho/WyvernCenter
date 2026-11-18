@@ -22,6 +22,10 @@ public class RButton : Button
     /// <summary>Small G-Helper "FN-Lock" style badge: filled with the accent colour when activated.</summary>
     public bool Pill { get; set; }
 
+    /// <summary>Own fill and text colours for a pill (brand-coloured link buttons); the fill lightens on hover.</summary>
+    public Color? PillBack { get; set; }
+    public Color? PillFore { get; set; }
+
     public RButton()
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint |
@@ -48,6 +52,7 @@ public class RButton : Button
 
         Color back = Secondary ? Theme.ButtonSecond : Theme.ButtonMain;
         if (Pill && activated) back = BorderColor;
+        if (Pill && PillBack is Color own) back = own;
         if (down) back = Theme.Lighten(back, 18);
         else if (hover) back = Theme.Lighten(back, 10);
 
@@ -56,7 +61,7 @@ public class RButton : Button
             using (var path = Theme.RoundRect(new RectangleF(0.5f, 0.5f, Width - 1, Height - 1), 4 * s))
             using (var brush = new SolidBrush(back))
                 g.FillPath(brush, path);
-            TextRenderer.DrawText(g, Text, Font, ClientRectangle, activated ? Color.White : Theme.ForeDim, back,
+            TextRenderer.DrawText(g, Text, Font, ClientRectangle, PillFore ?? (activated ? Color.White : Theme.ForeDim), back,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             return;
         }

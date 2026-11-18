@@ -51,7 +51,7 @@ public sealed class ProfilePopup : Form
         _ = Handle; // DeviceDpi is known once the window exists
         var scale = DeviceDpi / 96f * Theme.UserScale;
         var size = new Size((int)(500 * scale), (int)(68 * scale));
-        var area = Screen.FromPoint(Cursor.Position).WorkingArea;
+        var area = ScreenArea.AtCursor();
         Bounds = new Rectangle(area.Left + (area.Width - size.Width) / 2, area.Bottom - size.Height - (int)(40 * scale), size.Width, size.Height);
         using (var path = Theme.RoundRect(new RectangleF(0, 0, size.Width, size.Height), 10 * scale))
             Region = new Region(path);

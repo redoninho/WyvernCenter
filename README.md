@@ -36,8 +36,8 @@ It lives in the tray, uses about 20 MB of RAM in the background, and installs no
   It ships with five presets (Battery, Quiet, Balanced, Performance, Extreme), and you can add up to two of your own.
   Presets scale to your CPU and GPU: clock caps are fractions of your CPU's base and top speed and your GPU's top
   clock, power caps a fraction of your GPU's limit, and fan curves are percentages.
-- **Profile hotkey** (Ctrl + Alt + P by default): cycles through profiles, with a small popup.
-- **Automatic switching** between a charger profile and a battery profile.
+- **Profile hotkey** (Ctrl + Alt + P by default): cycles through profiles, with a small popup. Works from any app,
+  even in a game.
 - **Fan curves:** drag the six points per fan, with a live marker showing where each fan is now.
 - **Thermal failsafe:**
   - at 95 °C, both fans go to full speed;
@@ -106,7 +106,7 @@ active; hover it to see which ones to set to Disabled. Wyvern Center never chang
 |---|---|
 | Fans, performance mode, keyboard, sensors | The firmware's `SCM0` WMI data blocks (`MSI_System`, `MSI_CPU`, …), which map one-to-one onto EC registers. Read through MSI's `root\WMI` classes, or by firmware GUID when those aren't installed. No driver and no MSI software needed. |
 | Newer laptops (11th gen and later) | The firmware's WMI v2 interface (`MSI_ACPI`), called by GUID. Read-only for now. |
-| Battery charge limit (10th gen and older) | Not exposed by the firmware, so it goes through MSI's own Dragon Center service (`MSI Foundation Service`), the way Dragon Center sets it. Opt-in (Settings → This laptop), off by default. Wyvern starts the service only for the change, stops it about 10 s later and sets it back to Disabled if it was. Wyvern remembers the limit and puts it back at start-up if the laptop lost it. Note that this MSI service has known security issues (CVE-2026-37452/-37453/-37454) while it runs. |
+| Battery charge limit (10th gen and older) | Not exposed by the firmware, so it goes through MSI's own Dragon Center service (`MSI Foundation Service`), the way Dragon Center sets it. Opt-in (Settings → This laptop), off by default. Wyvern starts the service only for the change, stops it about 10 s later and sets it back to Disabled if it was. Wyvern remembers the limit and puts it back at start-up if the laptop lost it. MSI's firmware only starts charging again 10 % below the limit, so when you plug in a few percent under it Wyvern raises the limit briefly and puts it back once the battery gets there (also before shutdown and sleep). Note that this MSI service has known security issues (CVE-2026-37452/-37453/-37454) while it runs. |
 | Max Cooling | Wyvern's Cooler Boost: both fan curves to full speed through the firmware, put back when turned off. |
 | CPU clock and turbo | Windows power plan settings (`PROCFREQMAX`, `PERFBOOSTMODE`, …) and the Windows power mode. |
 | GPU clock cap and power limit | NVIDIA NVML clock locks. The power limit is a software limiter that steps the clock cap. |
@@ -144,6 +144,13 @@ Layout:
 
 Contributions are welcome, especially new model profiles. See [CONTRIBUTING.md](CONTRIBUTING.md). Report security
 issues privately: see [SECURITY.md](SECURITY.md).
+
+## Support
+
+Wyvern Center is free, has no ads or accounts and stays that way. If it helped you, you can support it here:
+
+[![Buy me a coffee](https://img.shields.io/badge/Buy_me_a_coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/noptic)
+[![Patreon](https://img.shields.io/badge/Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white)](https://www.patreon.com/Noptic)
 
 ## License
 

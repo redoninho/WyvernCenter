@@ -196,6 +196,8 @@ public sealed class AppController : ApplicationContext
         gpuTimer.Start();
         monitorTimer.Tick += (_, _) => Sample();
         trimTimer.Tick += (_, _) => TrimIdle();
+        chargeTimer.Tick += (_, _) => ChargeTick();
+        chargeTimer.Start();
 
         DisplayDevice = WyvernCenter.Core.Features.DisplayRefresh.InternalDisplay();
         if (DisplayDevice is not null) RefreshRates = WyvernCenter.Core.Features.DisplayRefresh.SupportedRates(DisplayDevice);
@@ -212,6 +214,14 @@ public sealed class AppController : ApplicationContext
 
         failsafeTimer = new System.Threading.Timer(_ => RunFailsafe(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        // Shutdown, restart or sign-out during a top-up: put the EC back to the user's limit first, or the laptop would
+        // charge to the raised value while it's off. Windows allows a few seconds; MSI's service starts in about one.
+        SystemEvents.SessionEnding += (_, _) =>
+        {
+            if (chargeTopUp.RaisedTo is null) return;
+            hw.Enqueue(LowerTopUp);
+            hw.WaitIdle(TimeSpan.FromSeconds(4));
+        };
 
         // Re-apply the profile in use at launch (EC values can reset on reboot); first run changes nothing.
         var onAcNow = SystemInformation.PowerStatus.PowerLineStatus != PowerLineStatus.Offline;
@@ -289,7 +299,7 @@ public sealed class AppController : ApplicationContext
     {
         const int gap = 10;
         var anchor = main is { IsDisposed: false, Visible: true } m ? m.Bounds : (Rectangle?)null;
-        var area = anchor is { } a ? Screen.FromRectangle(a).WorkingArea : Screen.PrimaryScreen!.WorkingArea;
+        var area = ScreenArea.Usable(anchor is { } a ? Screen.FromRectangle(a) : Screen.PrimaryScreen!);
         if (matchHeight && anchor is { } mh && f is IFitsHeight fits) fits.FitHeight(Math.Min(mh.Height, area.Height));
         else if (matchHeight && f is IFitsHeight fitsArea) fitsArea.FitHeight(Math.Min(area.Height - 2 * gap, Theme.S(900)));
         var right = anchor?.Left - gap ?? area.Right - gap;
@@ -349,7 +359,42 @@ public sealed class AppController : ApplicationContext
     }
 
     /// <summary>Last value read on the hardware thread (null = unknown/unavailable).</summary>
-    public int? Cached(string name) => cache.TryGetValue(name, out var v) ? v : null;
+    public int? Cached(string name) =>
+        // The charge limit shows the user's limit, not the EC's (Wyvern raises it briefly to top the battery up).
+        name == "chargeLimit" && Settings.UseMsiService && Settings.ChargeLimit is int limit && cache.TryGetValue(name, out var c) && c is not null
+            ? limit
+            : cache.TryGetValue(name, out var v) ? v : null;
+
+    // ---- Charge to the limit and hold (MSI's EC only restarts charging 10 % below its limit) -------------------
+    private readonly ChargeTopUp chargeTopUp = new();
+    private readonly System.Windows.Forms.Timer chargeTimer = new() { Interval = 30000 };
+
+    private void ChargeTick()
+    {
+        if (!Settings.UseMsiService || Settings.ChargeLimit is not int target) return;
+        var ps = SystemInformation.PowerStatus;
+        if (ps.BatteryChargeStatus.HasFlag(BatteryChargeStatus.NoSystemBattery) || ps.BatteryLifePercent is < 0 or > 1) return;
+        var battery = (int)Math.Round(ps.BatteryLifePercent * 100);
+        var onAc = ps.PowerLineStatus == PowerLineStatus.Online;
+        var charging = ps.BatteryChargeStatus.HasFlag(BatteryChargeStatus.Charging);
+        hw.TryEnqueueOnce("charge-topup", () =>
+        {
+            if (!Ec.IsAvailable("chargeLimit")) return;
+            if (chargeTopUp.Next(target, battery, onAc, charging) is not int write) return;
+            var r = Ec.Set("chargeLimit", write);
+            log.Append($"charge top-up: battery {battery}%, limit {target}%, EC limit {write}%: {r.Message}");
+            if (!r.Ok) chargeTopUp.WriteFailed(write, target);
+        });
+    }
+
+    /// <summary>Hardware queue: never leave the EC limit raised (quit, or the user turned the route off).</summary>
+    private void LowerTopUp()
+    {
+        if (chargeTopUp.RaisedTo is null || Settings.ChargeLimit is not int target) return;
+        var r = Ec.Set("chargeLimit", target);
+        log.Append($"charge top-up ended: EC limit back to {target}%: {r.Message}");
+        if (r.Ok) chargeTopUp.Reset();
+    }
 
     /// <summary>Queues hardware work, then reports the outcome and refreshes cached values.</summary>
     private void RunHw(string what, Func<IEnumerable<SetResult>> work)
@@ -889,7 +934,11 @@ public sealed class AppController : ApplicationContext
     public void SetSetting(string name, int value, string label) => RunHw(label, () =>
     {
         var r = Ec.Set(name, value);
-        if (name == "chargeLimit" && r.Ok) Post(() => { Settings.ChargeLimit = value; Settings.Save(); });
+        if (name == "chargeLimit" && r.Ok)
+        {
+            chargeTopUp.Reset(); // the EC now holds the user's new limit
+            Post(() => { Settings.ChargeLimit = value; Settings.Save(); });
+        }
         return new[] { r };
     });
 
@@ -1256,6 +1305,15 @@ public sealed class AppController : ApplicationContext
                     Notify();
                 });
                 break;
+            case PowerModes.Suspend:
+                // Sleep or hibernate during a top-up: the EC would keep charging to the raised value. Put it back first
+                // (Windows gives apps about two seconds here; the wait is capped either way).
+                if (chargeTopUp.RaisedTo is not null)
+                {
+                    hw.Enqueue(LowerTopUp);
+                    hw.WaitIdle(TimeSpan.FromSeconds(4));
+                }
+                break;
             case PowerModes.Resume:
                 // The EC can drop custom values across sleep; put the user's mode back.
                 Post(() => { if (Store.ActiveId is { } id) UseProfile(id); });
@@ -1296,7 +1354,8 @@ public sealed class AppController : ApplicationContext
         Settings.UseMsiService = on;
         Settings.Save();
         if (bridge is null) return;
-        bridge.Enabled = on;
+        if (!on) hw.Enqueue(LowerTopUp); // while the route still works
+        hw.Enqueue(() => bridge.Enabled = on);
         if (on) RefreshCache(includeBridge: true);
         else
         {
@@ -1410,7 +1469,8 @@ public sealed class AppController : ApplicationContext
         return HardwareDetect.Detect(gpu);
     }
 
-    private AutoSwitchSettings AutoSwitchNow => new(Settings.AutoSwitchEnabled, Store.OnAc, Store.OnBattery);
+    // Automatic charger/battery switching is off (its UI was removed): profiles change only by choice or the hotkey.
+    private AutoSwitchSettings AutoSwitchNow => new(false, Store.OnAc, Store.OnBattery);
 
     public void SetAutoSwitch(bool enabled, string onAcId, string onBatteryId)
     {
@@ -1515,6 +1575,8 @@ public sealed class AppController : ApplicationContext
         gpuTimer.Stop();
         monitorTimer.Stop();
         tray.Visible = false;
+        chargeTimer.Stop();
+        hw.Enqueue(LowerTopUp);
         hw.WaitIdle(TimeSpan.FromSeconds(15)); // never leave a half-written curve behind
         bridge?.Dispose(); // stops MSI's service if we started it, and sets it back to Disabled if it was
         hw.Dispose();

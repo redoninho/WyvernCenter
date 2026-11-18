@@ -14,14 +14,16 @@ public sealed class MainForm : Form
     private readonly string[] profileIds;
     private readonly Label lblProfile, lblProfileRight, lblCardCpu, lblCooling, lblCoolingRight, lblBattery, lblBatteryRight;
     private readonly Label lblChargeOffIcon, lblChargeOff;
+    /// <summary>Height of the "why the charge limit is off" line; the window closes up that gap while it's hidden.</summary>
+    private readonly int chargeNoticeHeight;
+    private bool chargeNoticeShown = true;
     private readonly Label lblScreen, lblKeyboard, lblStatus;
     private readonly RButton btnCoolerBoost, btnEdit, btnOverlay;
     private readonly RButton? btnNew;
     private bool viewing;
     private readonly List<RButton> chargeButtons, backlightButtons, refreshButtons;
     private readonly RSlider sliderCharge;
-    private readonly CheckBox chkAuto;
-    private readonly RDropdown ddAc, ddDc;
+    private readonly Label lblHotkeyHint;
     private readonly Label lblMsiApps;
     private readonly ToolTip tips = new() { InitialDelay = 300 };
     private readonly System.Windows.Forms.Timer chargeDebounce = new() { Interval = 450 };
@@ -157,6 +159,7 @@ public sealed class MainForm : Form
         lblBatteryRight.ForeColor = Theme.ForeDim;
         (lblChargeOffIcon, lblChargeOff) = L.Notice(Glyphs.Warning, "Disabled", Theme.Accent);
         sliderCharge = L.Slider(50, 100, Theme.Accent, 5);
+        chargeNoticeHeight = sliderCharge.Top - lblChargeOff.Top;
         // Sliders apply once the user stops moving them: one write, the final value.
         sliderCharge.ValueChanged += (_, _) =>
         {
@@ -173,25 +176,16 @@ public sealed class MainForm : Form
         tips.SetToolTip(chargeButtons[1], TextWrap.Lines("80% keeps the battery healthiest if you're mostly plugged in"));
         L.Space(4);
 
-        // ---- Auto switch ---------------------------------------------------------------------
-        L.Header(Glyphs.Refresh, "Profile on charger / on battery");
-        chkAuto = new CheckBox { Text = "Enabled", ForeColor = Theme.ForeMain };
-        ddAc = new RDropdown { Prefix = "Charger: " };
-        ddDc = new RDropdown { Prefix = "Battery: " };
-        foreach (var dd in new[] { ddAc, ddDc }) dd.Items.AddRange(profiles.Select(p => p.Name));
-        void PushAuto()
-        {
-            if (!syncing) app.SetAutoSwitch(chkAuto.Checked, profileIds[ddAc.SelectedIndex], profileIds[ddDc.SelectedIndex]);
-        }
-        chkAuto.CheckedChanged += (_, _) => PushAuto();
-        ddAc.SelectedIndexChanged += (_, _) => PushAuto();
-        ddDc.SelectedIndexChanged += (_, _) => PushAuto();
-        L.Row(3, 30, i => i switch { 0 => (Control)chkAuto, 1 => ddAc, _ => ddDc });
-        tips.SetToolTip(chkAuto, TextWrap.Lines("Plugging in or unplugging switches to the profile you pick here"));
+        // ---- Switching profiles: the hotkey (works from any app) -------------------------------------------------
+        L.Header(Glyphs.Keyboard, "Switch profiles");
+        lblHotkeyHint = L.Text("", Theme.ForeMain, 9f, 40);
+        lblHotkeyHint.UseMnemonic = false;
+        tips.SetToolTip(lblHotkeyHint, TextWrap.Lines("Works anywhere, even while another app or a game is in front. " +
+            "Pick which profiles are in the cycle in Profiles (\"In hotkey cycle\"); change the shortcut in Settings."));
         L.Space(6);
 
         // ---- Footer: buttons, then one status line with the version at its right ------------------------
-        int fh = L.S(70);
+        int fh = L.S(82);
         var footer = new Panel { BackColor = Theme.ButtonSecond, Bounds = new Rectangle(0, L.Y, L.Width, fh) };
         int pad = L.Pad, bh = L.S(30), gap = L.Gap, top = L.S(9);
         var btnSettings = new RButton { Text = "Settings", Glyph = Glyphs.Gear, BorderColor = Theme.Accent, Bounds = new Rectangle(pad, top, L.S(112), bh) };
@@ -220,19 +214,37 @@ public sealed class MainForm : Form
             Text = "v" + AppController.Version,
             ForeColor = Theme.ForeDim,
             Font = Theme.UiFont(8.5f),
-            Bounds = new Rectangle(L.Width - pad - L.S(50), rowTop, L.S(50), L.S(20)),
+            Bounds = new Rectangle(L.Width - pad - L.S(50), rowTop + L.S(4), L.S(50), L.S(20)),
             TextAlign = ContentAlignment.MiddleRight,
         };
+        // Support links in their brand colours (Buy Me a Coffee, Patreon) between the status line and the version.
+        RButton SupportPill(string text, int width, int right, Color back, Color fore, string url, string tip)
+        {
+            var b = new RButton
+            {
+                Pill = true, Text = text, PillBack = back, PillFore = fore, Font = Theme.UiFont(9.5f, FontStyle.Bold),
+                Bounds = new Rectangle(right - width, rowTop, width, L.S(28)),
+            };
+            b.Click += (_, _) => SupportLinks.Open(url);
+            tips.SetToolTip(b, TextWrap.Lines(tip));
+            return b;
+        }
+        var btnPatreon = SupportPill("Patreon", L.S(84), version.Left - L.S(6),
+            Color.FromArgb(255, 66, 77), Color.White, SupportLinks.Patreon,
+            "Support Wyvern Center monthly on Patreon (opens your browser)");
+        var btnCoffee = SupportPill("☕ Buy me a coffee", L.S(152), btnPatreon.Left - L.S(6),
+            Color.FromArgb(255, 221, 0), Color.Black, SupportLinks.BuyMeACoffee,
+            "Wyvern Center is free and stays free. If it helped, a coffee keeps it going (opens your browser)");
         lblStatus = new Label
         {
             ForeColor = Theme.ForeDim,
             Font = Theme.UiFont(8.5f),
-            Bounds = new Rectangle(pad, rowTop, version.Left - pad - L.S(6), L.S(20)),
+            Bounds = new Rectangle(pad, rowTop + L.S(4), btnCoffee.Left - pad - L.S(6), L.S(20)),
             TextAlign = ContentAlignment.MiddleLeft,
             AutoEllipsis = true, // the whole text is in its tooltip
             UseMnemonic = false,
         };
-        footer.Controls.AddRange(new Control[] { btnSettings, lblMsiApps, btnRestore, btnQuit, lblStatus, version });
+        footer.Controls.AddRange(new Control[] { btnSettings, lblMsiApps, btnRestore, btnQuit, lblStatus, btnCoffee, btnPatreon, version });
         Controls.Add(footer);
         L.Y += fh;
 
@@ -271,6 +283,26 @@ public sealed class MainForm : Form
         lblProfileRight.ForeColor = s.CpuTemp >= 90 ? Theme.Warn : Theme.ForeDim;
         lblCoolingRight.Text = s.GpuTemp is int g and > 0 ? $"GPU {g}°C  {Fan(s.GpuFan)}" : $"GPU asleep  {Fan(s.GpuFan)}";
         lblCoolingRight.ForeColor = s.GpuTemp >= 90 ? Theme.Warn : Theme.ForeDim;
+    }
+
+    /// <summary>
+    /// Shows or hides the line under the charge-limit header, moving everything below it (and the window's bottom edge)
+    /// so a hidden line leaves no gap. The window keeps its bottom edge where it is, next to the tray.
+    /// </summary>
+    private void ShowChargeNotice(bool show)
+    {
+        if (show == chargeNoticeShown) return;
+        chargeNoticeShown = show;
+        lblChargeOffIcon.Visible = lblChargeOff.Visible = show;
+        int dy = show ? chargeNoticeHeight : -chargeNoticeHeight;
+        int below = sliderCharge.Top;
+        SuspendLayout();
+        foreach (Control c in Controls)
+            if (c != lblChargeOff && c != lblChargeOffIcon && c.Top >= below) c.Top += dy;
+        var bottom = Bottom;
+        ClientSize = new Size(ClientSize.Width, ClientSize.Height + dy);
+        if (Visible) Top = bottom - Height;
+        ResumeLayout(true);
     }
 
     private void SyncUI()
@@ -329,7 +361,7 @@ public sealed class MainForm : Form
         var charge = app.Cached("chargeLimit");
         var chargeOn = ec.IsAvailable("chargeLimit");
         lblBattery.Text = charge is int c ? $"Battery Charge Limit: {c}%" : "Battery Charge Limit";
-        lblChargeOffIcon.Visible = lblChargeOff.Visible = !chargeOn;
+        ShowChargeNotice(!chargeOn);
         lblChargeOff.Text = app.Interface == FirmwareInterface.Wmi2 ? "Read-only (beta)"
             : !app.MsiServiceSwitchShown ? "Not available"
             : !app.MsiServiceInstalled ? "Needs MSI's Dragon Center service (hover)"
@@ -354,12 +386,10 @@ public sealed class MainForm : Form
         sliderCharge.Enabled = ec.IsAvailable("chargeLimit");
         if (charge is int cv) sliderCharge.SetSilently(Math.Clamp(cv, 50, 100));
 
-        chkAuto.Checked = app.Settings.AutoSwitchEnabled;
-        ddAc.SetSilently(Math.Max(0, Array.IndexOf(profileIds, app.Store.OnAc)));
-        ddDc.SetSilently(Math.Max(0, Array.IndexOf(profileIds, app.Store.OnBattery)));
-        ddAc.Enabled = ddDc.Enabled = chkAuto.Checked;
-        ddAc.Invalidate();
-        ddDc.Invalidate();
+        lblHotkeyHint.Text = app.HotkeyError is null
+            ? $"Press {app.HotkeyText} in any app to switch to the next profile (e.g. Battery when you unplug)."
+            : app.HotkeyError;
+        lblHotkeyHint.ForeColor = app.HotkeyError is null ? Theme.ForeMain : Theme.Warn;
 
         var hz = app.CurrentRefresh;
         lblScreen.Text = hz is int h ? $"Screen: {h}Hz" + (app.Settings.RefreshAuto ? " (Auto)" : "") : "Screen";
@@ -389,7 +419,7 @@ public sealed class MainForm : Form
     {
         if (!Visible)
         {
-            var area = Screen.FromPoint(Cursor.Position).WorkingArea;
+            var area = ScreenArea.AtCursor();
             Location = new Point(area.Right - Width - 12, area.Bottom - Height - 12);
         }
         Show();
