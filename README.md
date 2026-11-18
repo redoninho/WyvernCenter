@@ -2,6 +2,11 @@
 
 # Wyvern Center
 
+<p align="center">
+  <a href="https://buymeacoffee.com/noptic"><img src="https://img.shields.io/badge/Buy_me_a_coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
+  <a href="https://www.patreon.com/Noptic"><img src="https://img.shields.io/badge/Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white" alt="Patreon"></a>
+</p>
+
 A small, fast replacement for MSI Center on MSI laptops, in the spirit of [G-Helper](https://github.com/seerge/g-helper).
 It lives in the tray, uses about 20 MB of RAM in the background, and installs no drivers or services.
 
