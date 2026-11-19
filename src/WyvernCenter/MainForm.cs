@@ -25,6 +25,7 @@ public sealed class MainForm : Form
     private readonly RSlider sliderCharge;
     private readonly Label lblHotkeyHint;
     private readonly Label lblMsiApps;
+    private readonly Label lblVersion;
     private readonly ToolTip tips = new() { InitialDelay = 300 };
     private readonly System.Windows.Forms.Timer chargeDebounce = new() { Interval = 450 };
     private RButton? btnRestore;
@@ -209,7 +210,7 @@ public sealed class MainForm : Form
         };
 
         var rowTop = top + bh + L.S(5);
-        var version = new Label
+        var version = lblVersion = new Label
         {
             Text = "v" + AppController.Version,
             ForeColor = Theme.ForeDim,
@@ -217,6 +218,8 @@ public sealed class MainForm : Form
             Bounds = new Rectangle(L.Width - pad - L.S(50), rowTop + L.S(4), L.S(50), L.S(20)),
             TextAlign = ContentAlignment.MiddleRight,
         };
+        // Turns into an "Update" link when a newer release is out (Settings → Updates installs it).
+        version.Click += (_, _) => { if (app.UpdateAvailable is not null) app.ShowSettings(); };
         // Support links in their brand colours (Buy Me a Coffee, Patreon) between the status line and the version.
         RButton SupportPill(string text, int width, int right, Color back, Color fore, string url, string tip)
         {
@@ -312,6 +315,11 @@ public sealed class MainForm : Form
         var ec = app.Ec;
         Icon = app.AppIcon;
         ShowSensors(app.LastSensors);
+        var update = app.UpdateAvailable;
+        lblVersion.Text = update is null ? "v" + AppController.Version : "Update";
+        lblVersion.ForeColor = update is null ? Theme.ForeDim : Theme.InUse;
+        lblVersion.Cursor = update is null ? Cursors.Default : Cursors.Hand;
+        tips.SetToolTip(lblVersion, update is null ? null : $"Version {update.Version.ToString(3)} is out (you have {AppController.Version}). Click to install it from Settings → Updates.");
 
         var active = app.ActiveProfile;
         lblProfile.Text = active is null ? "Profile: pick one" : $"Profile: {active.Name}";

@@ -17,7 +17,17 @@ internal static class Program
     private static void Main(string[] args)
     {
         SecureStorage.PrepareDataDir();
-        using var instanceLock = AcquireInstanceLock(out var firstInstance);
+        var afterUpdate = args.Contains("--after-update");
+        var heldLock = AcquireInstanceLock(out var firstInstance);
+        // Started by an update: the old copy is still quitting (putting fans back, finishing writes). Wait for its lock
+        // rather than handing over to it.
+        for (var i = 0; afterUpdate && !firstInstance && i < 120; i++)
+        {
+            heldLock?.Dispose();
+            Thread.Sleep(500);
+            heldLock = AcquireInstanceLock(out firstInstance);
+        }
+        using var instanceLock = heldLock;
         using var showSignal = OpenShowEvent();
         if (!firstInstance)
         {
@@ -31,6 +41,7 @@ internal static class Program
         AppDomain.CurrentDomain.UnhandledException += (_, e) => { if (e.ExceptionObject is Exception ex) LogCrash(ex); };
 
         var app = new AppController(startHidden: args.Contains("--tray"));
+        if (afterUpdate) app.Post(app.AnnounceUpdated);
         if (args.Contains("--open=profiles")) app.Post(() => app.ShowProfiles());
         if (args.Contains("--open=settings")) app.Post(app.ShowSettings);
         if (args.Contains("--open=overlay")) app.Post(() => app.ShowOverlay(true));

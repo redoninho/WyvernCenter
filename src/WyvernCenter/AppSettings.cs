@@ -31,6 +31,12 @@ public sealed class AppSettings
     public GpuLimits? GpuLimits { get; set; }
     /// <summary>Windows' power mode before Wyvern Center first changed it (Restore puts it back).</summary>
     public PowerOverlay? OriginalPowerMode { get; set; }
+    /// <summary>Ask GitHub at start-up and once a day whether a newer release is out (only Wyvern's version number is sent).</summary>
+    public bool CheckForUpdates { get; set; } = true;
+    /// <summary>When the last update check got an answer (local time, shown in Settings).</summary>
+    public DateTime? LastUpdateCheck { get; set; }
+    /// <summary>The release tag the tray already announced, so each new version is announced once.</summary>
+    public string? UpdateAnnounced { get; set; }
     /// <summary>UI scale in percent (70–125), like D-Helper.</summary>
     public int UiScale { get; set; } = 100;
     /// <summary>Profile hotkey: RegisterHotKey modifiers and virtual key (default Ctrl + Alt + P).</summary>

@@ -100,6 +100,11 @@ Non-MSI laptops aren't supported.
 3. Optional: **Settings → Startup**. This copies Wyvern Center to `C:\Program Files\Wyvern Center` and starts it at logon,
    without a UAC prompt.
 
+**Updates** (from 0.5.4): Wyvern Center asks GitHub for the latest release at start-up and once a day (only its version
+number is sent; switch it off in **Settings → Updates**). When a newer one is out, the tray says so and **Update** downloads
+it from this repository's Releases, checks the zip and the exe against the release's SHA-256 checksums, puts it in
+`C:\Program Files\Wyvern Center` and restarts. Nothing installs without that click.
+
 Requirements: Windows 10 or 11 (64-bit). The .NET runtime is included in the exe.
 
 Dragon Center and MSI Center can override fan and performance settings. The footer shows whether their services are

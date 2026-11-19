@@ -14,6 +14,9 @@ public sealed class SettingsForm : Form
     private readonly RButton btnHotkey;
     private readonly CheckBox chkStartup, chkOverlay;
     private readonly Label lblReport;
+    private readonly CheckBox chkUpdates;
+    private readonly RButton btnUpdate;
+    private readonly Label lblUpdateVersion, lblUpdateStatus;
     private readonly Label lblOverlayHotkey, lblOverlayStatus, lblOpacity;
     private readonly RButton btnOverlayHotkey;
     private bool capturing, captureOverlay, syncing;
@@ -119,6 +122,29 @@ public sealed class SettingsForm : Form
         };
         L.Space(4);
 
+        (_, lblUpdateVersion, _) = L.Header(Glyphs.Refresh, "Updates",
+            "Wyvern Center asks GitHub for the newest release when it starts and once a day after that. Only its version number " +
+            "is sent. Nothing installs on its own: you click Update. The download comes from the project's GitHub releases and " +
+            "is used only if it matches the release's SHA-256 checksums; it then replaces the copy in Program Files and restarts.");
+        lblUpdateVersion.Text = "v" + AppController.Version;
+        chkUpdates = L.Add(new CheckBox
+        {
+            Text = "Check for updates automatically",
+            ForeColor = Theme.ForeMain,
+            Checked = app.Settings.CheckForUpdates,
+            Enabled = app.CanUpdate,
+        }, 28);
+        chkUpdates.CheckedChanged += (_, _) => { if (!syncing) app.SetCheckForUpdates(chkUpdates.Checked); };
+        btnUpdate = L.Add(new RButton { BorderColor = Theme.Accent }, 30);
+        btnUpdate.Click += (_, _) =>
+        {
+            if (app.UpdateAvailable is not null) app.InstallUpdate();
+            else _ = app.CheckForUpdate(manual: true);
+        };
+        lblUpdateStatus = L.Text("", Theme.ForeDim, 8.75f, 48);
+        lblUpdateStatus.UseMnemonic = false;
+        L.Space(4);
+
         // ---- This laptop: support level, the experimental opt-in, and a report for adding the model ----------------
         var (_, lblSupport, _) = L.Header(Glyphs.Shield, "This laptop", app.Support switch
         {
@@ -222,6 +248,7 @@ public sealed class SettingsForm : Form
         syncing = true;
         chkOverlay.Checked = app.OverlayShown;
         syncing = false;
+        SyncUpdate();
         lblOverlayHotkey.Text = app.OverlayHotkeyText;
         if (app.OverlayHotkeyError is { } overlayError) ShowOverlayStatus(overlayError, Theme.Warn);
         else ShowOverlayStatus(overlayMessage?.Text ?? "", overlayMessage?.Color ?? Theme.ForeDim);
@@ -230,6 +257,26 @@ public sealed class SettingsForm : Form
         else if (profileMessage is { } m) ShowProfileStatus(m.Text, m.Color);
         else if (app.Store.NextInCycle(null) is null) ShowProfileStatus("No profiles are in the hotkey cycle: tick \"In hotkey cycle\" in Edit profiles.", Theme.Warn);
         else ShowProfileStatus("Cycles: " + string.Join(" → ", app.Store.Profiles.Where(p => p.IsInCycle).Select(p => p.Name)), Theme.ForeDim);
+    }
+
+    private void SyncUpdate()
+    {
+        var update = app.UpdateAvailable;
+        btnUpdate.Text = update is not null ? $"Update to {update.Version.ToString(3)} and restart" : "Check now";
+        btnUpdate.Enabled = app.CanUpdate && !app.UpdateBusy;
+        lblUpdateVersion.ForeColor = update is not null ? Theme.InUse : Theme.ForeDim;
+        string text;
+        if (!app.CanUpdate)
+            text = !app.IsAdmin || !SecureStorage.Ready ? "Updates need Wyvern Center running as administrator."
+                : "Development build: updates only work in the published WyvernCenter.exe.";
+        else if (app.UpdateStatus != "")
+            text = app.UpdateStatus;
+        else
+            text = app.Settings.LastUpdateCheck is { } last ? $"Last checked {last:d MMM, HH:mm}." : "Not checked yet.";
+        if (update is not null && !app.UpdateBusy && !SecureStorage.RunningInstalled)
+            text += " It installs into Program Files; start it from there next time (or tick Run when Windows starts).";
+        lblUpdateStatus.Text = text;
+        lblUpdateStatus.ForeColor = app.UpdateStatusIsError ? Theme.Warn : update is not null ? Theme.ForeMain : Theme.ForeDim;
     }
 
     private RButton CaptureButton => captureOverlay ? btnOverlayHotkey : btnHotkey;

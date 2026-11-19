@@ -5,6 +5,7 @@ using WyvernCenter.Core.Monitoring;
 using WyvernCenter.Core.Profile;
 using WyvernCenter.Core.Safety;
 using WyvernCenter.Core.Scm;
+using WyvernCenter.Core.Update;
 using WyvernCenter.Core.Verify;
 using WyvernCenter.Core.Wmi2;
 using WyvernCenter.UI;
@@ -20,7 +21,7 @@ public readonly record struct Sensors(int? CpuTemp, int? CpuFan, int? GpuTemp, i
 /// </summary>
 public sealed class AppController : ApplicationContext
 {
-    public const string Version = "0.5.3";
+    public const string Version = "0.5.4";
 
     public AppSettings Settings { get; }
     public EcController Ec { get; }
@@ -240,8 +241,148 @@ public sealed class AppController : ApplicationContext
         // One short use of MSI's service at start, if switched on: read the charge limit and put it back if it was lost.
         hw.Enqueue(() => { RefreshCacheNow(includeBridge: Settings.UseMsiService); ReapplyChargeLimit(); Notify(); });
 
+        tray.BalloonTipClicked += (_, _) => { if (balloonIsUpdate) ShowSettings(); };
+        if (CanUpdate)
+        {
+            ThreadPool.QueueUserWorkItem(_ => UpdateInstaller.CleanUp(SecureStorage.InstallDir, UpdateStaging));
+            updateTimer.Tick += (_, _) => UpdateTick();
+            updateTimer.Start();
+        }
+
         if (!startHidden) ShowMain();
         else trimTimer.Start(); // started for the tray: shrink once start-up is done
+    }
+
+    // ---- Updates ----------------------------------------------------------------------
+
+    /// <summary>First check a minute after start-up, then the timer looks hourly and checks once a day.</summary>
+    private readonly System.Windows.Forms.Timer updateTimer = new() { Interval = 60_000 };
+    private DateTime lastUpdateCheckUtc = DateTime.MinValue;
+    private bool balloonIsUpdate;
+
+    /// <summary>Only the published single-file build, elevated, with the admin-only data folder, may replace itself.</summary>
+    public bool CanUpdate => IsAdmin && SecureStorage.Ready && SecureStorage.IsSingleFile;
+    public ReleaseInfo? UpdateAvailable { get; private set; }
+    public bool UpdateBusy { get; private set; }
+    /// <summary>What Settings shows under Updates; empty until something happened in this session.</summary>
+    public string UpdateStatus { get; private set; } = "";
+    public bool UpdateStatusIsError { get; private set; }
+
+    /// <summary>Downloads land in the admin-only data folder: nothing non-admin can swap the file before it's installed.</summary>
+    private static string UpdateStaging => Path.Combine(AppSettings.Dir, "update");
+
+    private void UpdateTick()
+    {
+        updateTimer.Interval = 3_600_000;
+        if (Settings.CheckForUpdates && DateTime.UtcNow - lastUpdateCheckUtc >= TimeSpan.FromHours(24)) _ = CheckForUpdate(manual: false);
+    }
+
+    public void SetCheckForUpdates(bool on)
+    {
+        Settings.CheckForUpdates = on;
+        Settings.Save();
+        if (on && DateTime.UtcNow - lastUpdateCheckUtc >= TimeSpan.FromHours(24)) _ = CheckForUpdate(manual: false);
+    }
+
+    public async Task CheckForUpdate(bool manual)
+    {
+        if (!CanUpdate || UpdateBusy || quitting) return;
+        UpdateBusy = true;
+        SetUpdateStatus("Checking for updates…", false);
+        try
+        {
+            using var downloader = new UpdateDownloader(Version);
+            var release = await downloader.LatestAsync(CancellationToken.None);
+            lastUpdateCheckUtc = DateTime.UtcNow;
+            Settings.LastUpdateCheck = DateTime.Now;
+            if (UpdateRelease.IsNewer(release, Version))
+            {
+                UpdateAvailable = release;
+                SetUpdateStatus($"Version {release.Version.ToString(3)} is available.", false);
+                if (Settings.UpdateAnnounced != release.Tag && !quitting)
+                {
+                    Settings.UpdateAnnounced = release.Tag;
+                    balloonIsUpdate = true;
+                    tray.ShowBalloonTip(8000, "Wyvern Center update",
+                        $"Version {release.Version.ToString(3)} is out. Click here (or Settings → Updates) to install it.", ToolTipIcon.Info);
+                }
+            }
+            else
+            {
+                UpdateAvailable = null;
+                SetUpdateStatus("Up to date.", false);
+            }
+            Settings.Save();
+        }
+        catch (Exception ex)
+        {
+            log.Append("update check failed: " + ex.Message);
+            // A failed background check stays quiet (offline laptops are normal); the hourly tick tries again.
+            if (!manual) lastUpdateCheckUtc = DateTime.UtcNow - TimeSpan.FromHours(23);
+            SetUpdateStatus("Couldn't reach GitHub to check for updates" + (manual ? ": " + ex.Message : "."), manual);
+        }
+        finally
+        {
+            UpdateBusy = false;
+            Notify();
+        }
+    }
+
+    /// <summary>
+    /// Downloads and checks the release, puts it in Program Files in place of this exe, starts it and quits. The new copy
+    /// waits for this one to exit (it needs the instance lock), so the hardware is never driven by two copies.
+    /// </summary>
+    public async void InstallUpdate()
+    {
+        if (UpdateAvailable is not { } release || UpdateBusy || !CanUpdate || quitting) return;
+        UpdateBusy = true;
+        var version = release.Version.ToString(3);
+        SetUpdateStatus($"Downloading {version}…", false);
+        var exeName = SecureStorage.RunningInstalled ? Path.GetFileName(Environment.ProcessPath!) : UpdateRelease.ExeName;
+        try
+        {
+            using var downloader = new UpdateDownloader(Version);
+            var progress = new Progress<int>(p => SetUpdateStatus($"Downloading {version}… {p}%", false));
+            var staged = await downloader.DownloadAsync(release, UpdateStaging, progress, CancellationToken.None);
+            if (quitting) return; // quit during the download: never install behind the user's back
+            SetUpdateStatus($"Installing {version}…", false);
+            var target = await Task.Run(() => UpdateInstaller.Swap(staged, SecureStorage.InstallDir, exeName));
+            log.Append($"update: {Version} -> {version} installed at {target}");
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = false, WorkingDirectory = SecureStorage.InstallDir };
+                psi.ArgumentList.Add("--after-update");
+                System.Diagnostics.Process.Start(psi)?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                UpdateInstaller.RollBack(SecureStorage.InstallDir, exeName);
+                throw new IOException("the new version couldn't be started (" + ex.Message + "); the old one was put back.");
+            }
+            Quit();
+        }
+        catch (Exception ex)
+        {
+            log.Append("update failed: " + ex.Message);
+            UpdateBusy = false;
+            SetUpdateStatus("Update failed: " + ex.Message, true);
+            Notify();
+        }
+    }
+
+    /// <summary>Called by the copy an update just started.</summary>
+    public void AnnounceUpdated()
+    {
+        log.Append("update: now running " + Version);
+        balloonIsUpdate = false;
+        tray.ShowBalloonTip(5000, "Wyvern Center", $"Updated to version {Version}.", ToolTipIcon.Info);
+    }
+
+    private void SetUpdateStatus(string text, bool error)
+    {
+        UpdateStatus = text;
+        UpdateStatusIsError = error;
+        Notify();
     }
 
     // ---- UI plumbing ----------------------------------------------------------------
@@ -1521,6 +1662,8 @@ public sealed class AppController : ApplicationContext
     {
         menu.Items.Clear();
         menu.Items.Add("Open Wyvern Center", null, (_, _) => ShowMain());
+        if (UpdateAvailable is { } update)
+            menu.Items.Add(new ToolStripMenuItem($"Update to {update.Version.ToString(3)}", null, (_, _) => InstallUpdate()) { Enabled = !UpdateBusy });
         menu.Items.Add(new ToolStripSeparator());
         foreach (var p in Store.Profiles)
         {
@@ -1574,6 +1717,7 @@ public sealed class AppController : ApplicationContext
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         gpuTimer.Stop();
         monitorTimer.Stop();
+        updateTimer.Stop();
         tray.Visible = false;
         chargeTimer.Stop();
         hw.Enqueue(LowerTopUp);
