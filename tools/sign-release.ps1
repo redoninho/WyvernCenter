@@ -27,8 +27,15 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Couldn't download $zipName from release $Tag." }
     $zip = Join-Path $work $zipName
 
-    gh attestation verify $zip -R $repo | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "The zip has no valid build attestation from $repo; not signing it." }
+    # Sign only what release.yml built from this tag at the commit THIS clone has for it (the code you reviewed), never
+    # just "anything attested by the repo": a tag moved or pushed by someone else fails here.
+    $commit = (git -C $PSScriptRoot rev-parse "$Tag^{commit}" 2>$null)
+    if ($LASTEXITCODE -ne 0 -or -not $commit) { throw "Tag $Tag isn't in this clone; fetch and review it first." }
+    $remote = (git -C $PSScriptRoot ls-remote origin "refs/tags/$Tag^{}" "refs/tags/$Tag") | ForEach-Object { ($_ -split "`t")[0] }
+    if ($remote -notcontains $commit) { throw "GitHub's $Tag doesn't point at your local $Tag ($commit); not signing." }
+    gh attestation verify $zip -R $repo --signer-workflow "github.com/$repo/.github/workflows/release.yml" `
+        --source-ref "refs/tags/$Tag" --source-digest $commit | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "The zip wasn't built by release.yml from $Tag at $commit; not signing it." }
 
     $archive = [IO.Compression.ZipFile]::OpenRead($zip)
     try {
