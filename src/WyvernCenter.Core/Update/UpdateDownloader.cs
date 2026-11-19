@@ -8,8 +8,8 @@ namespace WyvernCenter.Core.Update;
 /// <summary>
 /// Asks GitHub for the latest release and downloads it. Only Wyvern Center's version goes out (in the User-Agent GitHub
 /// requires); nothing about the laptop or the user. A download is used only if the zip and the exe inside it both match the
-/// SHA-256 checksums published with the release, the zip holds nothing but WyvernCenter.exe, and that exe carries the
-/// release's version.
+/// SHA-256 checksums published with the release, the zip holds nothing but WyvernCenter.exe, the maintainer's signature
+/// covers this tag and this exe (<see cref="UpdateSignature"/>), and the exe carries the release's version.
 /// </summary>
 public sealed class UpdateDownloader : IDisposable
 {
@@ -18,9 +18,12 @@ public sealed class UpdateDownloader : IDisposable
     private const int MaxSmallBytes = 1024 * 1024;
 
     private readonly HttpClient http;
+    private readonly IReadOnlyList<System.Security.Cryptography.ECParameters> keys;
 
-    public UpdateDownloader(string currentVersion, HttpMessageHandler? handler = null)
+    /// <param name="keys">Release signing keys (tests only; the app uses <see cref="UpdateSignature.ReleaseKeys"/>).</param>
+    public UpdateDownloader(string currentVersion, HttpMessageHandler? handler = null, IReadOnlyList<System.Security.Cryptography.ECParameters>? keys = null)
     {
+        this.keys = keys ?? UpdateSignature.ReleaseKeys;
         // Redirects to GitHub's file host are followed (never https → http); every call has its own deadline.
         http = handler is null ? new HttpClient() : new HttpClient(handler);
         http.Timeout = Timeout.InfiniteTimeSpan;
@@ -33,7 +36,7 @@ public sealed class UpdateDownloader : IDisposable
         using var req = new HttpRequestMessage(HttpMethod.Get, UpdateRelease.LatestApi);
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         var text = await SmallTextAsync(req, TimeSpan.FromSeconds(20), ct).ConfigureAwait(false);
-        return UpdateRelease.Parse(text) ?? throw new InvalidDataException("GitHub's answer wasn't a usable Wyvern Center release.");
+        return UpdateRelease.Parse(text) ?? throw new InvalidDataException("No update ready yet: the newest release isn't signed yet (or is incomplete).");
     }
 
     /// <summary>
@@ -46,6 +49,7 @@ public sealed class UpdateDownloader : IDisposable
             ?? throw new InvalidDataException("The release's zip checksum file is unreadable.");
         var exeSha = UpdateRelease.ParseSha256(await SmallTextAsync(Get(release.ExeShaUrl), TimeSpan.FromSeconds(30), ct).ConfigureAwait(false), UpdateRelease.ExeName)
             ?? throw new InvalidDataException("The release's exe checksum file is unreadable.");
+        var signature = await SmallTextAsync(Get(release.SigUrl), TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
 
         Directory.CreateDirectory(stagingDir);
         var zipPath = Path.Combine(stagingDir, release.ZipName);
@@ -77,6 +81,8 @@ public sealed class UpdateDownloader : IDisposable
                 await using var target = new FileStream(exePath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 var exeHash = await CopyHashedAsync(source, target, null, null, ct).ConfigureAwait(false);
                 if (exeHash != exeSha) throw new InvalidDataException("The exe doesn't match the release's checksum.");
+                if (!UpdateSignature.Verify(release.Tag, exeHash, signature, keys))
+                    throw new InvalidDataException("The release isn't signed by Wyvern Center's maintainer; not installing it.");
             }
 
             var info = FileVersionInfo.GetVersionInfo(exePath);

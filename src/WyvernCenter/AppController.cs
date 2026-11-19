@@ -21,7 +21,7 @@ public readonly record struct Sensors(int? CpuTemp, int? CpuFan, int? GpuTemp, i
 /// </summary>
 public sealed class AppController : ApplicationContext
 {
-    public const string Version = "0.5.4";
+    public const string Version = "0.5.5";
 
     public AppSettings Settings { get; }
     public EcController Ec { get; }
@@ -319,7 +319,8 @@ public sealed class AppController : ApplicationContext
             log.Append("update check failed: " + ex.Message);
             // A failed background check stays quiet (offline laptops are normal); the hourly tick tries again.
             if (!manual) lastUpdateCheckUtc = DateTime.UtcNow - TimeSpan.FromHours(23);
-            SetUpdateStatus("Couldn't reach GitHub to check for updates" + (manual ? ": " + ex.Message : "."), manual);
+            SetUpdateStatus(ex is InvalidDataException ? ex.Message
+                : "Couldn't reach GitHub to check for updates" + (manual ? ": " + ex.Message : "."), manual && ex is not InvalidDataException);
         }
         finally
         {

@@ -3,8 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace WyvernCenter.Core.Update;
 
-/// <summary>A GitHub release Wyvern Center can update to: its version and the three files the release workflow uploads.</summary>
-public sealed record ReleaseInfo(Version Version, string Tag, string ZipName, string ZipUrl, string ZipShaUrl, string ExeShaUrl);
+/// <summary>A GitHub release Wyvern Center can update to: its version, the three files the release workflow uploads and the
+/// maintainer's signature.</summary>
+public sealed record ReleaseInfo(Version Version, string Tag, string ZipName, string ZipUrl, string ZipShaUrl, string ExeShaUrl, string SigUrl);
 
 /// <summary>
 /// Reads GitHub's "latest release" answer. Everything is checked against fixed expectations (this repo, a plain vX.Y.Z
@@ -24,7 +25,7 @@ public static partial class UpdateRelease
     [GeneratedRegex(@"^([0-9a-fA-F]{64})[ \t]+\*?(\S+)\s*$")]
     private static partial Regex ShaLine();
 
-    /// <summary>The release, or null when the answer isn't a normal published release with all three files.</summary>
+    /// <summary>The release, or null when the answer isn't a normal published, signed release with all its files.</summary>
     public static ReleaseInfo? Parse(string json)
     {
         try
@@ -51,8 +52,10 @@ public static partial class UpdateRelease
                 return null;
             }
 
+            // No signature yet (just built, not signed): not offered; the next check sees it once it's signed.
             return Asset(zipName) is { } zip && Asset(zipName + ".sha256") is { } zipSha && Asset(ExeName + ".sha256") is { } exeSha
-                ? new ReleaseInfo(version, tag, zipName, zip, zipSha, exeSha)
+                   && Asset(UpdateSignature.SigName) is { } sig
+                ? new ReleaseInfo(version, tag, zipName, zip, zipSha, exeSha, sig)
                 : null;
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException or OverflowException)

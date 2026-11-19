@@ -11,7 +11,7 @@ public class UpdateReleaseTests
     private const string Prefix = UpdateRelease.DownloadPrefix;
 
     internal static string ReleaseJson(string tag = "v0.5.4", bool draft = false, bool prerelease = false, string? zipUrl = null,
-        bool withExeSha = true)
+        bool withExeSha = true, bool withSig = true)
     {
         var v = tag.TrimStart('v');
         var assets = new List<string>
@@ -20,6 +20,7 @@ public class UpdateReleaseTests
             Asset($"WyvernCenter-{v}.zip.sha256", $"{Prefix}{tag}/WyvernCenter-{v}.zip.sha256"),
         };
         if (withExeSha) assets.Add(Asset("WyvernCenter.exe.sha256", $"{Prefix}{tag}/WyvernCenter.exe.sha256"));
+        if (withSig) assets.Add(Asset("WyvernCenter.exe.sig", $"{Prefix}{tag}/WyvernCenter.exe.sig"));
         return $$"""{"tag_name":"{{tag}}","draft":{{(draft ? "true" : "false")}},"prerelease":{{(prerelease ? "true" : "false")}},"assets":[{{string.Join(",", assets)}}]}""";
 
         static string Asset(string name, string url) => $$"""{"name":"{{name}}","browser_download_url":"{{url}}"}""";
@@ -55,6 +56,30 @@ public class UpdateReleaseTests
 
     [Fact]
     public void Needs_all_three_files() => Assert.Null(UpdateRelease.Parse(ReleaseJson(withExeSha: false)));
+
+    [Fact]
+    public void Unsigned_releases_arent_offered() => Assert.Null(UpdateRelease.Parse(ReleaseJson(withSig: false)));
+
+    [Fact]
+    public void The_built_in_release_key_is_a_valid_P256_key()
+    {
+        using var ecdsa = ECDsa.Create(Assert.Single(UpdateSignature.ReleaseKeys));
+        Assert.Equal(256, ecdsa.KeySize);
+    }
+
+    [Fact]
+    public void Signature_covers_the_tag_and_the_exe()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var keys = new[] { key.ExportParameters(false) };
+        var hash = new string('b', 64);
+        var sig = Convert.ToBase64String(key.SignData(UpdateSignature.Message("v1.2.3", hash), HashAlgorithmName.SHA256));
+        Assert.True(UpdateSignature.Verify("v1.2.3", hash, sig + "\r\n", keys));
+        Assert.False(UpdateSignature.Verify("v1.2.4", hash, sig, keys));                        // moved to another version
+        Assert.False(UpdateSignature.Verify("v1.2.3", new string('c', 64), sig, keys));         // moved to another exe
+        Assert.False(UpdateSignature.Verify("v1.2.3", hash, sig, UpdateSignature.ReleaseKeys)); // someone else's key
+        Assert.False(UpdateSignature.Verify("v1.2.3", hash, "not base64!", keys));
+    }
 
     [Theory]
     [InlineData("")]
@@ -119,7 +144,15 @@ public class UpdateDownloaderTests : IDisposable
         }
     }
 
-    private static (ReleaseInfo, FakeGitHub) Release(byte[] zip, string? zipSha = null, string? exeSha = null)
+    private static readonly ECDsa TestKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+    private static readonly ECParameters[] TestKeys = { TestKey.ExportParameters(false) };
+
+    private static byte[] Sign(string tag, byte[] exe) =>
+        Encoding.ASCII.GetBytes(Convert.ToBase64String(TestKey.SignData(UpdateSignature.Message(tag, Sha(exe)), HashAlgorithmName.SHA256)));
+
+    private static UpdateDownloader Downloader(FakeGitHub gh) => new("0.5.3", gh, TestKeys);
+
+    private static (ReleaseInfo, FakeGitHub) Release(byte[] zip, string? zipSha = null, string? exeSha = null, byte[]? sig = null)
     {
         var json = UpdateReleaseTests.ReleaseJson("v1.0.0");
         var r = UpdateRelease.Parse(json)!;
@@ -129,6 +162,7 @@ public class UpdateDownloaderTests : IDisposable
             [r.ZipUrl] = zip,
             [r.ZipShaUrl] = Encoding.ASCII.GetBytes($"{zipSha ?? Sha(zip)}  {r.ZipName}\r\n"),
             [r.ExeShaUrl] = Encoding.ASCII.GetBytes($"{exeSha ?? Sha(Exe)}  WyvernCenter.exe\r\n"),
+            [r.SigUrl] = sig ?? Sign("v1.0.0", Exe),
         };
         return (r, new FakeGitHub(files));
     }
@@ -137,7 +171,7 @@ public class UpdateDownloaderTests : IDisposable
     public async Task Finds_the_latest_release_and_sends_only_the_version()
     {
         var (_, gh) = Release(Zip(("WyvernCenter.exe", Exe)));
-        using var d = new UpdateDownloader("0.5.3", gh);
+        using var d = Downloader(gh);
         var r = await d.LatestAsync(default);
         Assert.Equal(new Version(1, 0, 0), r.Version);
         Assert.Equal("WyvernCenter/0.5.3", Assert.Single(gh.UserAgents));
@@ -147,7 +181,7 @@ public class UpdateDownloaderTests : IDisposable
     public async Task Downloads_and_verifies_the_exe()
     {
         var (r, gh) = Release(Zip(("WyvernCenter.exe", Exe)));
-        using var d = new UpdateDownloader("0.5.3", gh);
+        using var d = Downloader(gh);
         var percents = new List<int>();
         var exe = await d.DownloadAsync(r, dir, new SyncProgress(percents.Add), default);
         Assert.Equal(Exe, File.ReadAllBytes(exe));
@@ -159,7 +193,7 @@ public class UpdateDownloaderTests : IDisposable
     public async Task Refuses_a_zip_that_doesnt_match_its_checksum()
     {
         var (r, gh) = Release(Zip(("WyvernCenter.exe", Exe)), zipSha: new string('0', 64));
-        using var d = new UpdateDownloader("0.5.3", gh);
+        using var d = Downloader(gh);
         await Assert.ThrowsAsync<InvalidDataException>(() => d.DownloadAsync(r, dir, null, default));
         Assert.Empty(Directory.GetFiles(dir));
     }
@@ -168,16 +202,36 @@ public class UpdateDownloaderTests : IDisposable
     public async Task Refuses_an_exe_that_doesnt_match_its_checksum()
     {
         var (r, gh) = Release(Zip(("WyvernCenter.exe", Exe)), exeSha: new string('0', 64));
-        using var d = new UpdateDownloader("0.5.3", gh);
+        using var d = Downloader(gh);
         await Assert.ThrowsAsync<InvalidDataException>(() => d.DownloadAsync(r, dir, null, default));
         Assert.Empty(Directory.GetFiles(dir));
+    }
+
+    [Fact]
+    public async Task Refuses_a_release_without_the_maintainers_signature()
+    {
+        using var other = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var forged = Encoding.ASCII.GetBytes(Convert.ToBase64String(other.SignData(UpdateSignature.Message("v1.0.0", Sha(Exe)), HashAlgorithmName.SHA256)));
+        var (r, gh) = Release(Zip(("WyvernCenter.exe", Exe)), sig: forged);
+        using var d = Downloader(gh);
+        var ex = await Assert.ThrowsAsync<InvalidDataException>(() => d.DownloadAsync(r, dir, null, default));
+        Assert.Contains("signed", ex.Message);
+        Assert.Empty(Directory.GetFiles(dir));
+    }
+
+    [Fact]
+    public async Task Refuses_an_old_signed_exe_passed_off_as_a_new_release()
+    {
+        var (r, gh) = Release(Zip(("WyvernCenter.exe", Exe)), sig: Sign("v0.9.0", Exe));
+        using var d = Downloader(gh);
+        await Assert.ThrowsAsync<InvalidDataException>(() => d.DownloadAsync(r, dir, null, default));
     }
 
     [Fact]
     public async Task Refuses_a_zip_with_anything_else_in_it()
     {
         var (r, gh) = Release(Zip(("WyvernCenter.exe", Exe), ("payload.dll", new byte[] { 1 })));
-        using var d = new UpdateDownloader("0.5.3", gh);
+        using var d = Downloader(gh);
         await Assert.ThrowsAsync<InvalidDataException>(() => d.DownloadAsync(r, dir, null, default));
     }
 
@@ -193,8 +247,9 @@ public class UpdateDownloaderTests : IDisposable
             [r.ZipUrl] = zip,
             [r.ZipShaUrl] = Encoding.ASCII.GetBytes($"{Sha(zip)}  {r.ZipName}"),
             [r.ExeShaUrl] = Encoding.ASCII.GetBytes($"{Sha(Exe)}  WyvernCenter.exe"),
+            [r.SigUrl] = Sign("v2.0.0", Exe),
         });
-        using var d = new UpdateDownloader("0.5.3", gh);
+        using var d = Downloader(gh);
         var ex = await Assert.ThrowsAsync<InvalidDataException>(() => d.DownloadAsync(r, dir, null, default));
         Assert.Contains("not 2.0.0", ex.Message);
     }
@@ -239,7 +294,7 @@ public class UpdateDownloaderTests : IDisposable
     public async Task Real_github_release_downloads_and_verifies()
     {
         if (Environment.GetEnvironmentVariable("WYVERN_NET_TESTS") != "1") return;
-        using var d = new UpdateDownloader("0.0.1");
+        using var d = new UpdateDownloader("0.0.1"); // the real release key: the latest release must be signed
         var r = await d.LatestAsync(default);
         var exe = await d.DownloadAsync(r, dir, null, default);
         Assert.True(new FileInfo(exe).Length > 50_000_000);

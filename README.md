@@ -102,8 +102,10 @@ Non-MSI laptops aren't supported.
 
 **Updates** (from 0.5.4): Wyvern Center asks GitHub for the latest release at start-up and once a day (only its version
 number is sent; switch it off in **Settings → Updates**). When a newer one is out, the tray says so and **Update** downloads
-it from this repository's Releases, checks the zip and the exe against the release's SHA-256 checksums, puts it in
-`C:\Program Files\Wyvern Center` and restarts. Nothing installs without that click.
+it from this repository's Releases, checks the zip and the exe against the release's SHA-256 checksums and (from 0.5.5)
+the maintainer's release signature, puts it in `C:\Program Files\Wyvern Center` and restarts. Nothing installs without
+that click. The signature is made offline with a key that never goes to GitHub (`tools/sign-release.ps1`, public key in
+`UpdateSignature.cs`), so a release someone else managed to publish here would not be installed.
 
 Requirements: Windows 10 or 11 (64-bit). The .NET runtime is included in the exe.
 

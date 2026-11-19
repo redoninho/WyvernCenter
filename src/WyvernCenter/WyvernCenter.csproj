@@ -19,7 +19,7 @@
     <AssemblyTitle>Wyvern Center</AssemblyTitle>
     <Company>Wyvern Center</Company>
     <RootNamespace>WyvernCenter</RootNamespace>
-    <Version>0.5.4</Version>
+    <Version>0.5.5</Version>
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <InvariantGlobalization>true</InvariantGlobalization>
     <TieredPGO>false</TieredPGO>
